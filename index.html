@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="real">
+<head>
+  <!-- MathJax config PHẢI đặt TRƯỚC khi load MathJax -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        processEnvironments: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+        ignoreHtmlClass: 'no-mathjax',
+        processHtmlClass: 'mathjax'
+      },
+      startup: {
+        typeset: false   // tắt auto-typeset, tự gọi thủ công sau khi render câu hỏi
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VSAT – Thi Thử Trực Tuyến</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     DASHBOARD  (màn hình chính quản lý)
+═══════════════════════════════════════ -->
+<div id="dashboard-screen" class="screen active">
+  <div class="dash-layout">
+
+    <!-- Sidebar -->
+    <aside class="dash-sidebar">
+      <div class="dash-logo">
+        <span class="dash-logo-icon"></span>
+        <span class="dash-logo-text">VSAT Thi Thử</span>
+      </div>
+      <nav class="dash-nav">
+        <button class="dnav active" data-panel="panel-bank">Ngân hàng câu hỏi</button>
+        <button class="dnav" data-panel="panel-config">Cấu hình bốc đề</button>
+        <button class="dnav" data-panel="panel-history">Lịch sử làm bài</button>
+      </nav>
+      <div class="dash-sidebar-footer">
+        <button class="dash-start-btn" id="dash-start-btn">🎯 Vào thi</button>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="dash-main">
+
+      <!-- ── PANEL: BANK ── -->
+      <div class="dash-panel active" id="panel-bank">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Ngân hàng câu hỏi</h2>
+            <p class="panel-sub">Nhập đề thi JSON để thêm câu hỏi. Có thể sửa câu hỏi &amp; đáp án trực tiếp tại đây.</p>
+          </div>
+          <div class="panel-header-actions">
+            <button class="ph-btn ph-import" id="bank-import-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Nhập JSON
+            </button>
+            <input type="file" id="bank-file-input" accept=".json" hidden multiple/>
+            <button class="ph-btn ph-danger" id="bank-clear-btn">🗑 Xóa tất cả</button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div class="bank-stats-row">
+          <div class="bsr-card total">Tổng <span id="bstat-total">0</span></div>
+          <div class="bsr-card mcq">TN <span id="bstat-mcq">0</span></div>
+          <div class="bsr-card tf">Đ/S <span id="bstat-tf">0</span></div>
+          <div class="bsr-card short">TLN <span id="bstat-short">0</span></div>
+          <div class="bsr-card match">Ghép <span id="bstat-match">0</span></div>
+        </div>
+
+        <!-- JSON format guide -->
+        <div class="format-guide" id="format-guide">
+          <div class="fg-header" id="fg-toggle">
+            <span>📄 Hướng dẫn định dạng JSON &amp; nhập đáp án</span>
+            <span class="fg-arrow">▼</span>
+          </div>
+          <div class="fg-body hidden" id="fg-body">
+            <p>File JSON cần có cấu trúc <code>{"questions":[...]}</code>. Mỗi câu hỏi như sau:</p>
+            <pre class="fg-code">{
+  "type": "mcq",
+  "question": "Câu hỏi...",
+  "options": ["A...","B...","C...","D..."],
+  "answer": 0
+}
+
+{
+  "type": "truefalse",
+  "question": "Câu hỏi...",
+  "statements": ["Mệnh đề 1","Mệnh đề 2","Mệnh đề 3","Mệnh đề 4"],
+  "answers": ["D","S","D","S"]
+}
+
+{
+  "type": "short",
+  "question": "Câu hỏi...",
+  "answer": "63"
+}
+
+{
+  "type": "matching",
+  "question": "Câu hỏi...",
+  "left": ["Ý 1","Ý 2","Ý 3","Ý 4"],
+  "right": ["A...","B...","C...","D...","E...","F..."],
+  "answers": [0,1,2,3]
+}</pre>
+            <p class="fg-note">💡 <b>Đáp án</b>: MCQ – index (0=A), Đúng/Sai – "D"/"S", Trả lời ngắn – chuỗi so sánh, Ghép cột – index của cột phải. Có thể để trống và nhập sau qua nút ✏️ sửa.</p>
+          </div>
+        </div>
+
+        <!-- Filter -->
+        <div class="bank-filter-row">
+          <select class="filter-sel" id="bank-filter-type">
+            <option value="">Tất cả loại</option>
+            <option value="mcq">Trắc nghiệm</option>
+            <option value="truefalse">Đúng/Sai</option>
+            <option value="short">Trả lời ngắn</option>
+            <option value="matching">Ghép cột</option>
+          </select>
+          <input type="text" class="filter-search" id="bank-search" placeholder="🔍 Tìm kiếm câu hỏi..."/>
+        </div>
+
+        <!-- Empty state -->
+        <div class="bank-empty-state" id="bank-empty-state">
+          <div class="bes-icon">📭</div>
+          <div class="bes-title">Ngân hàng trống</div>
+          <div class="bes-sub">Nhấn <b>Nhập JSON</b> để thêm câu hỏi từ file đề thi có sẵn.</div>
+        </div>
+
+        <!-- Question list -->
+        <div class="bank-list-grid" id="bank-list"></div>
+      </div>
+
+      <!-- ── PANEL: CONFIG ── -->
+      <div class="dash-panel" id="panel-config">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Cấu hình bốc đề</h2>
+            <p class="panel-sub">Hệ thống sẽ bốc ngẫu nhiên đúng số câu đã thiết lập từ ngân hàng mỗi lần thi.</p>
+          </div>
+        </div>
+
+        <div class="cfg-grid">
+          <div class="cfg-card">
+            <div class="cfg-card-type mcq">Trắc nghiệm (MCQ)</div>
+            <div class="cfg-card-avail" id="avail-mcq">0 câu trong ngân hàng</div>
+            <div class="cfg-card-input-row">
+              <span>Bốc</span>
+              <input type="number" class="cfg-num" id="cfg-mcq" min="0" max="99" value="9"/>
+              <span>câu</span>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <div class="cfg-card-type tf">Đúng/Sai</div>
+            <div class="cfg-card-avail" id="avail-tf">0 câu trong ngân hàng</div>
+            <div class="cfg-card-input-row">
+              <span>Bốc</span>
+              <input type="number" class="cfg-num" id="cfg-tf" min="0" max="99" value="11"/>
+              <span>câu</span>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <div class="cfg-card-type short">Trả lời ngắn</div>
+            <div class="cfg-card-avail" id="avail-short">0 câu trong ngân hàng</div>
+            <div class="cfg-card-input-row">
+              <span>Bốc</span>
+              <input type="number" class="cfg-num" id="cfg-short" min="0" max="99" value="5"/>
+              <span>câu</span>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <div class="cfg-card-type match">Ghép cột</div>
+            <div class="cfg-card-avail" id="avail-match">0 câu trong ngân hàng</div>
+            <div class="cfg-card-input-row">
+              <span>Bốc</span>
+              <input type="number" class="cfg-num" id="cfg-match" min="0" max="99" value="0"/>
+              <span>câu</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-bottom-row">
+          <div class="cfg-time-card">
+            <label class="cfg-time-label">⏱ Thời gian làm bài</label>
+            <div class="cfg-card-input-row">
+              <input type="number" class="cfg-num" id="cfg-time" min="5" max="300" value="90"/>
+              <span>phút</span>
+            </div>
+          </div>
+          <div class="cfg-total-card">
+            <div class="cfg-total-label">Tổng số câu mỗi đề</div>
+            <div class="cfg-total-num" id="cfg-total">25</div>
+            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem" id="cfg-maxscore">(tối đa 150 điểm)</div>
+          </div>
+        </div>
+
+        <div class="cfg-warn hidden" id="config-warn"></div>
+        <button class="cfg-save-btn" id="config-save-btn">💾 Lưu cấu hình</button>
+        <span class="cfg-saved-msg hidden" id="config-saved-msg">✓ Đã lưu!</span>
+      </div>
+
+      <!-- ── PANEL: HISTORY ── -->
+      <div class="dash-panel" id="panel-history">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Lịch sử làm bài</h2>
+            <p class="panel-sub">Tất cả các lần thi đã được lưu tự động.</p>
+          </div>
+          <button class="ph-btn ph-danger" id="hist-clear-btn">🗑 Xóa lịch sử</button>
+        </div>
+        <div class="hist-empty hidden" id="hist-empty">
+          <div style="font-size:2.5rem">📊</div>
+          <div>Chưa có lịch sử làm bài nào.</div>
+        </div>
+        <div class="hist-table-wrap">
+          <table class="hist-table" id="hist-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Thí sinh</th>
+                <th>Môn thi</th>
+                <th>Số câu</th>
+                <th>Điểm</th>
+                <th>Thời gian</th>
+              </tr>
+            </thead>
+            <tbody id="hist-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════ -->
+<div id="login-screen" class="screen">
+  <div class="login-page">
+    <h1 class="login-org">Trung tâm Khảo thí quốc gia và Đánh giá chất lượng giáo dục</h1>
+
+    <div class="login-info-box">
+      <div class="login-info-title">Thông tin đăng nhập</div>
+      <div class="login-info-line">Tài khoản: <span id="info-account">VKOD00000</span></div>
+      <div class="login-info-line">Mật khẩu: <span id="info-password">--------</span></div>
+    </div>
+
+    <div class="login-card">
+      <h2 class="login-title">Đăng nhập</h2>
+      <div class="login-form">
+        <div class="form-group">
+          <label class="form-label">Tài khoản</label>
+          <input type="text" id="login-username" class="form-input" placeholder="Nhập mã VKOD..."/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mật khẩu</label>
+          <input type="password" id="login-password" class="form-input" placeholder="Nhập mật khẩu..."/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Môn thi</label>
+          <select id="login-subject" class="form-input form-select">
+            <option value="Toán">Toán</option>
+            <option value="Ngữ Văn">Ngữ Văn</option>
+            <option value="Vật Lý">Vật Lý</option>
+            <option value="Hóa Học">Hóa Học</option>
+            <option value="Sinh Học">Sinh Học</option>
+            <option value="Lịch Sử">Lịch Sử</option>
+            <option value="Địa Lý">Địa Lý</option>
+          </select>
+        </div>
+        <div id="bank-status-badge" class="bank-status-badge hidden"></div>
+        <div id="login-error" class="login-error hidden">Vui lòng nhập đầy đủ thông tin.</div>
+        <div id="draw-error" class="login-error hidden"></div>
+        <button class="login-btn" id="login-btn">🎯 Bắt đầu thi</button>
+        <div class="login-divider"><span>hoặc nạp đề trực tiếp</span></div>
+        <label class="login-import-btn" for="file-input-login">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Tải đề JSON lên (bỏ qua ngân hàng)
+        </label>
+        <input type="file" id="file-input-login" accept=".json" hidden/>
+        <div id="import-error" class="import-error hidden"></div>
+        <button class="back-to-dash-btn" id="back-to-dash-btn">← Quay lại Dashboard</button>
+      </div>
+    </div>
+    <div class="login-footer">© VKOD</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     EXAM SCREEN
+═══════════════════════════════════════ -->
+<div id="exam-screen" class="screen">
+  <header class="exam-header">
+    <div id="exam-title" class="exam-name">Đề thi</div>
+    <div class="header-center">
+      <div class="timer-box" id="timer-box">90:00</div>
+    </div>
+    <div class="header-right">
+      <button class="theme-toggle-btn" id="theme-toggle-btn">
+        <span id="theme-icon">🌌</span>
+        <span id="theme-label">Galaxy</span>
+      </button>
+      <button class="submit-btn-top" id="submit-btn-top">Nộp bài</button>
+    </div>
+  </header>
+  <div class="exam-body" id="exam-body"></div>
+  <div class="bottom-bar">
+    <div class="bottom-bar-inner">
+      <button class="bottom-nav-btn" id="prev-btn" disabled>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Câu trước
+      </button>
+      <div class="bottom-dots" id="bottom-dots"></div>
+      <button class="bottom-nav-btn" id="next-btn">
+        Câu tiếp
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     RESULT SCREEN
+═══════════════════════════════════════ -->
+<div id="result-screen" class="screen">
+  <div class="result-page">
+    <div class="result-action-bar">
+      <button class="rab-btn rab-answers" id="btn-show-answers">👁 Hiện đáp án</button>
+      <button class="rab-btn rab-edit" id="btn-edit-answers">✏️ Sửa đáp án</button>
+      <button class="rab-btn rab-restart" id="restart-btn">🔄 Thi lại</button>
+      <button class="rab-btn rab-dash" id="goto-dash-btn">🏠 Dashboard</button>
+    </div>
+
+    <div class="result-box">
+      <div class="result-box-title">Kết quả bài thi</div>
+      <div class="result-info-line">Số báo danh: <b id="result-sbd">VKOD00000</b></div>
+      <div class="result-info-line">Môn thi: <b id="result-subject">Toán</b></div>
+      <div class="result-info-line">Số câu đã làm: <b id="result-answered">0</b> / <b id="result-total">0</b></div>
+      <div class="result-score-line">Điểm thi: <span class="result-score-val" id="result-score">0 điểm</span></div>
+    </div>
+
+    <div class="answer-display-panel hidden" id="answer-display-panel">
+      <div class="adp-header">
+        <span class="adp-title">Đáp án chính thức</span>
+        <button class="adp-close" id="adp-close">✕</button>
+      </div>
+      <div class="adp-body" id="adp-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ANSWER EDITOR MODAL
+═══════════════════════════════════════ -->
+<div id="answer-editor-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-wide">
+    <div class="modal-header">
+      <h3>Nhập / Sửa đáp án</h3>
+      <button class="modal-x-close" id="answer-editor-close">✕</button>
+    </div>
+    <div class="modal-body aem-body" id="answer-editor-body"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="answer-editor-cancel">Huỷ</button>
+      <button class="modal-confirm aem-save" id="answer-editor-save">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Lưu &amp; Tính lại điểm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     BANK ITEM EDIT MODAL
+═══════════════════════════════════════ -->
+<div id="bank-edit-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-wide">
+    <div class="modal-header">
+      <h3 id="bank-edit-title">Chỉnh sửa câu hỏi</h3>
+      <button class="modal-x-close" id="bank-edit-close">✕</button>
+    </div>
+    <div class="modal-body" id="bank-edit-body" style="max-height:70vh;overflow-y:auto;padding:1rem 1.3rem"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="bank-edit-cancel">Huỷ</button>
+      <button class="modal-confirm" id="bank-edit-save" style="background:var(--success)">💾 Lưu câu hỏi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SUBMIT CONFIRM MODAL
+═══════════════════════════════════════ -->
+<div id="submit-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Xác nhận nộp bài</h3></div>
+    <div class="modal-body"><p id="modal-message"></p></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="modal-cancel">Tiếp tục làm</button>
+      <button class="modal-confirm" id="modal-confirm">Nộp bài ngay</button>
+    </div>
+  </div>
+</div>
+
+<script src="exam.js"></script>
+</body>
+</html>
