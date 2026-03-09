@@ -51,7 +51,7 @@ const sb = window.supabase;
 // ══════════════════════════════════════════
 const LS_CONFIG = 'vsat_config_v2';   // config vẫn giữ localStorage
 
-const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý'];
+const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý',"Tiếng Anh"];
 
 const DEFAULT_CONFIG = { mcq: 6, truefalse: 9, short: 5, matching: 5, time: 90 };
 // 6+9+5+5 = 25 câu × 6đ = 150đ max
