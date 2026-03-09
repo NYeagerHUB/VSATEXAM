@@ -1,26 +1,62 @@
 /**
- * VSAT – exam.js  v7.0
+ * VSAT – exam.js  v8.0  (Supabase Edition)
+ *
+ * ══ CẤU HÌNH SUPABASE — sửa 2 dòng bên dưới ══
+ *   Lấy tại: Supabase Dashboard → Settings → API
  *
  * FIX & FEATURES:
- *   ✓ LaTeX / MathJax: tự động render sau khi build HTML
- *   ✓ Ngân hàng câu hỏi tách biệt theo từng môn (localStorage key = vsat_bank_<môn>)
- *   ✓ Điểm tối đa 150đ (25 câu × 6đ/câu)
- *   ✓ Mỗi câu hỏi có id riêng (gán khi import/thêm)
- *   ✓ Phân loại lưu: mcq | truefalse | matching | short
+ *   ✓ Bank + History lưu trên Supabase (PostgreSQL)
+ *   ✓ Config vẫn giữ localStorage (per-device)
+ *   ✓ Loading overlay khi gọi API
+ *   ✓ Giữ nguyên toàn bộ logic thi / chấm điểm
  *
  * SCORING (6đ/câu, tối đa 150đ):
  *   MCQ     : đúng = 6đ, sai/bỏ = 0đ
- *   TF      : 1 đúng→1đ | 2→2đ | 3→3đ | 4→6đ  (ý chưa chọn = sai)
+ *   TF      : 1 đúng→1đ | 2→2đ | 3→3đ | 4→6đ
  *   Matching: floor(đúng/n × 6)
  *   Short   : đúng = 6đ, sai/bỏ = 0đ
+ *
+ * SQL SCHEMA — chạy 1 lần trong Supabase SQL Editor:
+ * ─────────────────────────────────────────────────
+ * create table questions (
+ *   id          text primary key,
+ *   subject     text not null,
+ *   type        text not null,
+ *   question    text not null,
+ *   options     jsonb, statements jsonb,
+ *   left_col    jsonb, right_col  jsonb,
+ *   answers     jsonb, answer     text,
+ *   placeholder text,
+ *   created_at  timestamptz default now()
+ * );
+ * create table exam_history (
+ *   id         text primary key,
+ *   username   text, subject text,
+ *   score int, possible int, total_q int, answered int, title text,
+ *   created_at timestamptz default now()
+ * );
+ * alter table questions    enable row level security;
+ * alter table exam_history enable row level security;
+ * create policy "public_all" on questions    for all using (true) with check (true);
+ * create policy "public_all" on exam_history for all using (true) with check (true);
+ * ─────────────────────────────────────────────────
  */
+
+// ══════════════════════════════════════════
+//  ★ ĐỔI 2 DÒNG NÀY ★
+// ══════════════════════════════════════════
+const SUPABASE_URL = 'https://xxxxxxxxxxxx.supabase.co';
+const SUPABASE_KEY = 'your_anon_public_key_here';
+// ══════════════════════════════════════════
+
+// Khởi tạo client (yêu cầu thêm vào index.html trước script này):
+// <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ══════════════════════════════════════════
 //  CONSTANTS
 // ══════════════════════════════════════════
-const BANK_PREFIX = 'vsat_bank_';   // + tên môn, vd: vsat_bank_Toán
-const LS_CONFIG   = 'vsat_config_v2';
-const LS_HISTORY  = 'vsat_history_v2';
+const LS_CONFIG = 'vsat_config_v2';   // config vẫn giữ localStorage
 
 const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý'];
 
@@ -78,17 +114,7 @@ function renderMath(container) {
   }
 }
 
-// ── LocalStorage per-subject bank ──
-function bankKey(subject) { return BANK_PREFIX + (subject || currentSubject); }
-
-function loadBank(subject) {
-  try { return JSON.parse(localStorage.getItem(bankKey(subject))) || []; }
-  catch { return []; }
-}
-function saveBank(subject, data) {
-  localStorage.setItem(bankKey(subject || currentSubject), JSON.stringify(data || bank));
-}
-
+// ── Config (giữ localStorage — per device) ──
 function loadConfig() {
   try {
     const c = JSON.parse(localStorage.getItem(LS_CONFIG));
@@ -97,17 +123,172 @@ function loadConfig() {
 }
 function saveConfig() { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); }
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(LS_HISTORY)) || []; } catch { return []; }
+// ══════════════════════════════════════════
+//  LOADING OVERLAY
+// ══════════════════════════════════════════
+function showLoading(msg = 'Đang tải...') {
+  let el = document.getElementById('vsat-loading');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'vsat-loading';
+    el.innerHTML = `<div class="vl-box"><div class="vl-spinner"></div><span class="vl-msg"></span></div>`;
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9000;backdrop-filter:blur(3px)';
+    const style = document.createElement('style');
+    style.textContent = `.vl-box{background:var(--content-bg,#fff);border-radius:10px;padding:1.4rem 2rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;box-shadow:0 8px 40px rgba(0,0,0,.3)}.vl-msg{font-size:.88rem;font-weight:600;color:var(--text,#1a202c);font-family:var(--sans,sans-serif)}.vl-spinner{width:30px;height:30px;border:3px solid var(--border,#dde1e7);border-top-color:var(--accent,#17b8c8);border-radius:50%;animation:vspin .7s linear infinite}@keyframes vspin{to{transform:rotate(360deg)}}`;
+    document.head.appendChild(style);
+    document.body.appendChild(el);
+  }
+  el.querySelector('.vl-msg').textContent = msg;
+  el.style.display = 'flex';
 }
-function saveHistory(h) { localStorage.setItem(LS_HISTORY, JSON.stringify(h)); }
+function hideLoading() {
+  const el = document.getElementById('vsat-loading');
+  if (el) el.style.display = 'none';
+}
+
+// ══════════════════════════════════════════
+//  SUPABASE — BANK (bảng questions)
+// ══════════════════════════════════════════
+
+/** Chuyển DB row → app question object */
+function dbRowToQ(row) {
+  return {
+    id:          row.id,
+    type:        row.type,
+    question:    row.question,
+    options:     row.options     || undefined,
+    statements:  row.statements  || undefined,
+    left:        row.left_col    || undefined,
+    right:       row.right_col   || undefined,
+    answers:     row.answers     || undefined,
+    answer:      row.answer != null
+                   ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
+                   : undefined,
+    placeholder: row.placeholder || undefined,
+  };
+}
+
+/** Chuyển app question object → DB row */
+function qToDbRow(q, subject) {
+  return {
+    id:          q.id,
+    subject:     subject,
+    type:        q.type,
+    question:    q.question,
+    options:     q.options     || null,
+    statements:  q.statements  || null,
+    left_col:    q.left        || null,
+    right_col:   q.right       || null,
+    answers:     q.answers     || null,
+    answer:      (q.answer !== null && q.answer !== undefined) ? String(q.answer) : null,
+    placeholder: q.placeholder || null,
+  };
+}
+
+/** Lấy toàn bộ câu hỏi 1 môn */
+async function loadBank(subject) {
+  const { data, error } = await sb
+    .from('questions')
+    .select('*')
+    .eq('subject', subject)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('loadBank:', error); return []; }
+  return (data || []).map(dbRowToQ);
+}
+
+/** Lưu toàn bộ bank (upsert nhiều row) */
+async function saveBank(subject, data) {
+  // Khi saveBank được gọi sau import / edit / delete,
+  // ta sync lại toàn bộ: xóa hết rồi insert lại
+  const rows = (data || bank).map(q => qToDbRow(q, subject || currentSubject));
+  // Xóa tất cả câu của môn này
+  await sb.from('questions').delete().eq('subject', subject || currentSubject);
+  if (rows.length > 0) {
+    const { error } = await sb.from('questions').insert(rows);
+    if (error) { console.error('saveBank insert:', error); showToast('⚠️ Lỗi lưu ngân hàng: ' + error.message, true); }
+  }
+}
+
+/** Upsert 1 câu (dùng cho saveBankEdit) */
+async function saveSingleQuestion(q, subject) {
+  const { error } = await sb
+    .from('questions')
+    .upsert(qToDbRow(q, subject || currentSubject), { onConflict: 'id' });
+  if (error) { console.error('saveSingleQuestion:', error); showToast('⚠️ Lỗi lưu câu hỏi: ' + error.message, true); }
+}
+
+/** Xóa 1 câu hỏi theo id */
+async function deleteSingleQuestion(id) {
+  const { error } = await sb.from('questions').delete().eq('id', id);
+  if (error) { console.error('deleteSingleQuestion:', error); showToast('⚠️ Lỗi xóa: ' + error.message, true); }
+}
+
+/** Đếm câu hỏi tất cả môn — dùng cho subject tabs */
+async function loadAllSubjectCounts() {
+  const { data, error } = await sb.from('questions').select('subject');
+  if (error) { console.error('loadAllSubjectCounts:', error); return {}; }
+  const counts = {};
+  SUBJECTS.forEach(s => counts[s] = 0);
+  (data || []).forEach(r => { if (counts[r.subject] !== undefined) counts[r.subject]++; });
+  return counts;
+}
+
+// ══════════════════════════════════════════
+//  SUPABASE — HISTORY (bảng exam_history)
+// ══════════════════════════════════════════
+
+async function loadHistory() {
+  const { data, error } = await sb
+    .from('exam_history')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) { console.error('loadHistory:', error); return []; }
+  return (data || []).map(r => ({
+    id:       r.id,
+    date:     r.created_at,
+    username: r.username,
+    subject:  r.subject,
+    score:    r.score,
+    possible: r.possible,
+    totalQ:   r.total_q,
+    answered: r.answered,
+    title:    r.title,
+  }));
+}
+
+async function saveHistory(entries) {
+  // entries là mảng đã slice(0,200) từ showResults
+  // Chỉ insert entry đầu tiên (entry mới nhất)
+  if (!entries.length) return;
+  const e = entries[0];
+  const { error } = await sb.from('exam_history').insert({
+    id:       e.id,
+    username: e.username,
+    subject:  e.subject,
+    score:    e.score,
+    possible: e.possible,
+    total_q:  e.totalQ,
+    answered: e.answered,
+    title:    e.title,
+  });
+  if (error) console.error('saveHistory:', error);
+}
 
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
-  bank = loadBank(currentSubject);
+
+  showLoading('Đang kết nối Supabase...');
+  try {
+    bank = await loadBank(currentSubject);
+  } catch(e) {
+    console.error(e);
+    showToast('⚠️ Không kết nối được Supabase. Kiểm tra URL / Key.', true);
+  }
+  hideLoading();
 
   // Dashboard nav
   document.querySelectorAll('.dnav').forEach(btn =>
@@ -141,8 +322,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('config-save-btn').addEventListener('click', saveConfigFromUI);
 
   // History
-  document.getElementById('hist-clear-btn').addEventListener('click', () => {
-    if (confirm('Xóa toàn bộ lịch sử làm bài?')) { saveHistory([]); renderHistory(); }
+  document.getElementById('hist-clear-btn').addEventListener('click', async () => {
+    if (!confirm('Xóa toàn bộ lịch sử làm bài?')) return;
+    showLoading('Đang xóa...');
+    await sb.from('exam_history').delete().neq('id', '__never__');
+    hideLoading();
+    renderHistory();
   });
 
   // Bank edit modal
@@ -154,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-btn').addEventListener('click', handleLogin);
   document.getElementById('file-input-login').addEventListener('change', handleFileInputLogin);
   document.getElementById('back-to-dash-btn').addEventListener('click', () => showScreen('dashboard-screen'));
-  document.getElementById('login-subject').addEventListener('change', updateLoginBadge);
+  document.getElementById('login-subject').addEventListener('change', () => updateLoginBadge());
 
   // Exam
   document.getElementById('submit-btn-top').addEventListener('click', openSubmitModal);
@@ -182,8 +367,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════
 //  SUBJECT TABS IN DASHBOARD
 // ══════════════════════════════════════════
-function buildSubjectTabs() {
-  // Inject subject tabs above bank panel
+async function buildSubjectTabs() {
+  // Đếm câu hỏi tất cả môn từ Supabase
+  const counts = await loadAllSubjectCounts();
+
   const panelBank = document.getElementById('panel-bank');
   if (!panelBank) return;
 
@@ -196,8 +383,7 @@ function buildSubjectTabs() {
   }
 
   tabBar.innerHTML = SUBJECTS.map(s => {
-    const b = loadBank(s);
-    const cnt = b.length;
+    const cnt = counts[s] || 0;
     const isActive = s === currentSubject;
     return `<button class="subj-tab ${isActive ? 'active' : ''}" data-subject="${s}"
       style="background:${isActive ? 'var(--accent)' : 'var(--q-alt-bg)'};
@@ -215,9 +401,11 @@ function buildSubjectTabs() {
   );
 }
 
-function switchSubject(subject) {
+async function switchSubject(subject) {
   currentSubject = subject;
-  bank = loadBank(subject);
+  showLoading(`Đang tải ngân hàng ${subject}...`);
+  bank = await loadBank(subject);
+  hideLoading();
   buildSubjectTabs();
   renderBankList();
   renderConfigTab();
@@ -249,8 +437,8 @@ function switchDashPanel(panelId) {
   if (panelId === 'panel-history') renderHistory();
 }
 
-function gotoLogin() {
-  updateLoginBadge();
+async function gotoLogin() {
+  await updateLoginBadge();
   showScreen('login-screen');
   const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
   const pass = String(Math.floor(10000000 + Math.random() * 90000000));
@@ -261,26 +449,27 @@ function gotoLogin() {
   document.getElementById('login-error').classList.add('hidden');
 }
 
-function gotoDashboard() {
+async function gotoDashboard() {
   clearInterval(timerInterval);
   examData = null; answers = []; answerKey = []; currentIdx = 0;
-  bank = loadBank(currentSubject);
+  showLoading('Đang tải...');
+  bank = await loadBank(currentSubject);
+  hideLoading();
+  buildSubjectTabs();
   renderBankList();
   renderHistory();
   showScreen('dashboard-screen');
 }
 
-function updateLoginBadge() {
+async function updateLoginBadge() {
   const subject = document.getElementById('login-subject')?.value || studentInfo.subject || 'Toán';
-  const b = loadBank(subject);
   const badge = document.getElementById('bank-status-badge');
-  if (!b.length) {
-    badge.classList.add('hidden');
-    return;
-  }
-  const cnt = countByType(b);
+  const { data, error } = await sb.from('questions').select('type').eq('subject', subject);
+  if (error || !data || !data.length) { badge.classList.add('hidden'); return; }
+  const c = { mcq: 0, truefalse: 0, short: 0, matching: 0 };
+  data.forEach(r => { if (c[r.type] !== undefined) c[r.type]++; });
   badge.classList.remove('hidden');
-  badge.innerHTML = `📚 Ngân hàng <b>${subject}</b>: <b>${b.length}</b> câu &nbsp;·&nbsp; TN:<b>${cnt.mcq}</b> &nbsp;Đ/S:<b>${cnt.truefalse}</b> &nbsp;TLN:<b>${cnt.short}</b> &nbsp;Ghép:<b>${cnt.matching}</b>`;
+  badge.innerHTML = `📚 Ngân hàng <b>${subject}</b>: <b>${data.length}</b> câu &nbsp;·&nbsp; TN:<b>${c.mcq}</b> &nbsp;Đ/S:<b>${c.truefalse}</b> &nbsp;TLN:<b>${c.short}</b> &nbsp;Ghép:<b>${c.matching}</b>`;
 }
 
 function countByType(bankArr) {
@@ -293,7 +482,7 @@ function countByType(bankArr) {
 // ══════════════════════════════════════════
 //  LOGIN / FILE INPUT
 // ══════════════════════════════════════════
-function handleLogin() {
+async function handleLogin() {
   const user    = document.getElementById('login-username').value.trim();
   const pass    = document.getElementById('login-password').value.trim();
   const subject = document.getElementById('login-subject').value;
@@ -309,12 +498,13 @@ function handleLogin() {
   errEl.classList.add('hidden');
   studentInfo = { username: user, subject };
 
-  // Lấy ngân hàng của môn đã chọn
-  const subjectBank = loadBank(subject);
+  showLoading(`Đang bốc đề ${subject}...`);
+  const subjectBank = await loadBank(subject);
+  hideLoading();
+
   const drawn = drawFromBank(subjectBank);
 
   if (drawn === null) {
-    // Ngân hàng trống → thông báo lỗi
     drawErr.textContent = `⚠️ Ngân hàng môn "${subject}" chưa có câu hỏi. Vui lòng vào Dashboard để nhập đề.`;
     drawErr.classList.remove('hidden');
     return;
@@ -743,7 +933,7 @@ function hasAnyKey() {
 // ══════════════════════════════════════════
 //  RESULTS
 // ══════════════════════════════════════════
-function showResults() {
+async function showResults() {
   document.getElementById('result-sbd').textContent     = studentInfo.username || 'GUEST';
   document.getElementById('result-subject').textContent = studentInfo.subject  || 'Toán';
   const answered = answers.filter((_, i) => isAnswered(i)).length;
@@ -758,8 +948,8 @@ function showResults() {
     if (pts !== null) { total += pts; possible += 6; }
   });
 
-  const hist = loadHistory();
-  hist.unshift({
+  // Lưu lịch sử lên Supabase (không block UI)
+  saveHistory([{
     id: uid(),
     date: new Date().toISOString(),
     username: studentInfo.username,
@@ -767,8 +957,7 @@ function showResults() {
     score: total, possible,
     totalQ: examData.questions.length,
     answered, title: examData.title
-  });
-  saveHistory(hist.slice(0, 200));
+  }]);
 
   showScreen('result-screen');
 }
@@ -922,7 +1111,7 @@ function handleBankImport(e) {
 
   files.forEach(file => {
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
         let data = JSON.parse(ev.target.result);
         let qs = [];
@@ -933,7 +1122,6 @@ function handleBankImport(e) {
         const valid = ['truefalse','mcq','matching','short'];
         qs.forEach(q => {
           if (valid.includes(q.type) && q.question) {
-            // Gán id nếu chưa có
             if (!q.id) q.id = uid();
             bank.push({ ...q });
             added++;
@@ -942,7 +1130,9 @@ function handleBankImport(e) {
       } catch(err) { errors.push(`${file.name}: ${err.message}`); }
       pending--;
       if (pending === 0) {
-        saveBank(currentSubject, bank);
+        showLoading(`Đang lưu ${added} câu lên Supabase...`);
+        await saveBank(currentSubject, bank);
+        hideLoading();
         buildSubjectTabs();
         renderBankList();
         showToast(added > 0 ? `✓ Đã thêm ${added} câu vào ngân hàng [${currentSubject}]` : '⚠️ Không thêm được câu nào');
@@ -954,18 +1144,23 @@ function handleBankImport(e) {
   e.target.value = '';
 }
 
-function clearBank() {
+async function clearBank() {
   if (!confirm(`Xóa toàn bộ ngân hàng môn "${currentSubject}"? Không thể hoàn tác.`)) return;
+  showLoading('Đang xóa...');
+  await sb.from('questions').delete().eq('subject', currentSubject);
   bank = [];
-  saveBank(currentSubject, bank);
+  hideLoading();
   buildSubjectTabs();
   renderBankList();
 }
 
-function deleteBankItem(idx) {
+async function deleteBankItem(idx) {
   if (!confirm('Xóa câu hỏi này?')) return;
+  const q = bank[idx];
+  showLoading('Đang xóa...');
+  await deleteSingleQuestion(q.id);
   bank.splice(idx, 1);
-  saveBank(currentSubject, bank);
+  hideLoading();
   buildSubjectTabs();
   renderBankList();
 }
@@ -1120,7 +1315,7 @@ function closeBankEdit() {
   document.getElementById('bank-edit-modal').classList.add('hidden');
   bankEditIdx = -1;
 }
-function saveBankEdit() {
+async function saveBankEdit() {
   if (bankEditIdx < 0) return;
   const q = { ...bank[bankEditIdx] };
   q.question = document.getElementById('bedit-question').value.trim();
@@ -1149,8 +1344,10 @@ function saveBankEdit() {
   }
 
   bank[bankEditIdx] = q;
-  saveBank(currentSubject, bank);
   closeBankEdit();
+  showLoading('Đang lưu...');
+  await saveSingleQuestion(q, currentSubject);
+  hideLoading();
   renderBankList();
   showToast('✓ Đã lưu câu hỏi');
 }
@@ -1194,8 +1391,8 @@ function saveConfigFromUI() {
 // ══════════════════════════════════════════
 //  HISTORY TAB
 // ══════════════════════════════════════════
-function renderHistory() {
-  const hist    = loadHistory();
+async function renderHistory() {
+  const hist    = await loadHistory();
   const emptyEl = document.getElementById('hist-empty');
   const tbody   = document.getElementById('hist-tbody');
   if (!tbody) return;
@@ -1212,7 +1409,7 @@ function renderHistory() {
     const maxPts  = h.totalQ ? h.totalQ * 6 : h.possible;
     const scoreDisplay = h.possible > 0 ? `${h.score}/${maxPts}` : '–';
     return `<tr>
-      <td style="color:var(--text-muted);font-family:var(--mono);font-size:.76rem">${hist.length - idx}</td>
+      <td style="color:var(--text-muted);font-family:var(--mono);font-size:.76rem">${idx + 1}</td>
       <td><b>${escH(h.username)}</b></td>
       <td><span class="hist-subject">${escH(h.subject)}</span></td>
       <td style="font-family:var(--mono)">${h.answered || 0}/${h.totalQ}</td>
