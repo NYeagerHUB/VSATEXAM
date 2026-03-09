@@ -45,8 +45,8 @@
 // ══════════════════════════════════════════
 //  ★ ĐỔI 2 DÒNG NÀY ★
 // ══════════════════════════════════════════
-const SUPABASE_URL = 'https://xxxxxxxxxxxx.supabase.co';
-const SUPABASE_KEY = 'your_anon_public_key_here';
+const SUPABASE_URL = 'https://hksqqvkldguxwxqhqrbj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrc3FxdmtsZGd1eHd4cWhxcmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjIyMzQsImV4cCI6MjA4ODYzODIzNH0.BTvLT7zb1BkKRwK0c8ntE2tez1kuSpVkKVf_kCg5wXI';
 // ══════════════════════════════════════════
 
 // Khởi tạo client — nếu chưa cấu hình sẽ fallback sang localStorage
