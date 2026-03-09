@@ -49,17 +49,12 @@ const SUPABASE_URL = 'https://hksqqvkldguxwxqhqrbj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrc3FxdmtsZGd1eHd4cWhxcmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjIyMzQsImV4cCI6MjA4ODYzODIzNH0.BTvLT7zb1BkKRwK0c8ntE2tez1kuSpVkKVf_kCg5wXI';
 // ══════════════════════════════════════════
 
-// Khởi tạo client — nếu chưa cấu hình sẽ fallback sang localStorage
+// Khởi tạo Supabase client
 let sb = null;
-let USE_SUPABASE = false;
 try {
-  if (SUPABASE_URL && !SUPABASE_URL.includes('xxxxxxxxxxxx') &&
-      SUPABASE_KEY && !SUPABASE_KEY.includes('your_anon')) {
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    USE_SUPABASE = true;
-  }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 } catch(e) {
-  console.warn('Supabase init failed, using localStorage fallback:', e);
+  console.error('Supabase init failed:', e);
 }
 
 // ══════════════════════════════════════════
@@ -133,141 +128,8 @@ function loadConfig() {
 function saveConfig() { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); }
 
 // ══════════════════════════════════════════
-//  LOCALSTORAGE FALLBACK HELPERS
+//  LOADING OVERLAY
 // ══════════════════════════════════════════
-const BANK_PREFIX = 'vsat_bank_';
-const LS_HISTORY  = 'vsat_history_v2';
-
-function _lsLoadBank(subject) {
-  try { return JSON.parse(localStorage.getItem(BANK_PREFIX + subject)) || []; } catch { return []; }
-}
-function _lsSaveBank(subject, data) {
-  localStorage.setItem(BANK_PREFIX + subject, JSON.stringify(data));
-}
-function _lsLoadHistory() {
-  try { return JSON.parse(localStorage.getItem(LS_HISTORY)) || []; } catch { return []; }
-}
-function _lsSaveHistory(entries) {
-  const hist = _lsLoadHistory();
-  hist.unshift(entries[0]);
-  localStorage.setItem(LS_HISTORY, JSON.stringify(hist.slice(0, 200)));
-}
-function _lsCountAll() {
-  const counts = {};
-  SUBJECTS.forEach(s => counts[s] = _lsLoadBank(s).length);
-  return counts;
-}
-
-// ══════════════════════════════════════════
-//  SUPABASE — BANK (bảng questions)
-// ══════════════════════════════════════════
-
-function dbRowToQ(row) {
-  return {
-    id:          row.id,
-    type:        row.type,
-    question:    row.question,
-    options:     row.options     || undefined,
-    statements:  row.statements  || undefined,
-    left:        row.left_col    || undefined,
-    right:       row.right_col   || undefined,
-    answers:     row.answers     || undefined,
-    answer:      row.answer != null
-                   ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
-                   : undefined,
-    placeholder: row.placeholder || undefined,
-  };
-}
-
-function qToDbRow(q, subject) {
-  return {
-    id:          q.id,
-    subject:     subject,
-    type:        q.type,
-    question:    q.question,
-    options:     q.options     || null,
-    statements:  q.statements  || null,
-    left_col:    q.left        || null,
-    right_col:   q.right       || null,
-    answers:     q.answers     || null,
-    answer:      (q.answer !== null && q.answer !== undefined) ? String(q.answer) : null,
-    placeholder: q.placeholder || null,
-  };
-}
-
-async function loadBank(subject) {
-  if (!USE_SUPABASE) return _lsLoadBank(subject);
-  const { data, error } = await sb
-    .from('questions').select('*').eq('subject', subject)
-    .order('created_at', { ascending: true });
-  if (error) { console.error('loadBank:', error); return _lsLoadBank(subject); }
-  return (data || []).map(dbRowToQ);
-}
-
-async function saveBank(subject, data) {
-  if (!USE_SUPABASE) { _lsSaveBank(subject, data || bank); return; }
-  const rows = (data || bank).map(q => qToDbRow(q, subject || currentSubject));
-  await sb.from('questions').delete().eq('subject', subject || currentSubject);
-  if (rows.length > 0) {
-    const { error } = await sb.from('questions').insert(rows);
-    if (error) { console.error('saveBank:', error); showToast('⚠️ Lỗi lưu: ' + error.message, true); }
-  }
-  // Sync localStorage backup
-  _lsSaveBank(subject || currentSubject, data || bank);
-}
-
-async function saveSingleQuestion(q, subject) {
-  if (!USE_SUPABASE) { _lsSaveBank(subject || currentSubject, bank); return; }
-  const { error } = await sb.from('questions')
-    .upsert(qToDbRow(q, subject || currentSubject), { onConflict: 'id' });
-  if (error) { console.error('saveSingleQ:', error); showToast('⚠️ Lỗi lưu câu hỏi: ' + error.message, true); }
-}
-
-async function deleteSingleQuestion(id) {
-  if (!USE_SUPABASE) return;
-  const { error } = await sb.from('questions').delete().eq('id', id);
-  if (error) { console.error('deleteQ:', error); showToast('⚠️ Lỗi xóa: ' + error.message, true); }
-}
-
-async function loadAllSubjectCounts() {
-  if (!USE_SUPABASE) return _lsCountAll();
-  const { data, error } = await sb.from('questions').select('subject');
-  if (error) { console.error('countSubjects:', error); return _lsCountAll(); }
-  const counts = {};
-  SUBJECTS.forEach(s => counts[s] = 0);
-  (data || []).forEach(r => { if (counts[r.subject] !== undefined) counts[r.subject]++; });
-  return counts;
-}
-
-// ══════════════════════════════════════════
-//  SUPABASE — HISTORY (bảng exam_history)
-// ══════════════════════════════════════════
-
-async function loadHistory() {
-  if (!USE_SUPABASE) return _lsLoadHistory();
-  const { data, error } = await sb
-    .from('exam_history').select('*')
-    .order('created_at', { ascending: false }).limit(200);
-  if (error) { console.error('loadHistory:', error); return _lsLoadHistory(); }
-  return (data || []).map(r => ({
-    id: r.id, date: r.created_at,
-    username: r.username, subject: r.subject,
-    score: r.score, possible: r.possible,
-    totalQ: r.total_q, answered: r.answered, title: r.title,
-  }));
-}
-
-async function saveHistory(entries) {
-  if (!USE_SUPABASE) { _lsSaveHistory(entries); return; }
-  if (!entries.length) return;
-  const e = entries[0];
-  const { error } = await sb.from('exam_history').insert({
-    id: e.id, username: e.username, subject: e.subject,
-    score: e.score, possible: e.possible,
-    total_q: e.totalQ, answered: e.answered, title: e.title,
-  });
-  if (error) console.error('saveHistory:', error);
-}
 function showLoading(msg = 'Đang tải...') {
   let el = document.getElementById('vsat-loading');
   if (!el) {
@@ -338,6 +200,43 @@ async function loadBank(subject) {
   return (data || []).map(dbRowToQ);
 }
 
+/** Lưu toàn bộ bank (upsert nhiều row) */
+async function saveBank(subject, data) {
+  // Khi saveBank được gọi sau import / edit / delete,
+  // ta sync lại toàn bộ: xóa hết rồi insert lại
+  const rows = (data || bank).map(q => qToDbRow(q, subject || currentSubject));
+  // Xóa tất cả câu của môn này
+  await sb.from('questions').delete().eq('subject', subject || currentSubject);
+  if (rows.length > 0) {
+    const { error } = await sb.from('questions').insert(rows);
+    if (error) { console.error('saveBank insert:', error); showToast('⚠️ Lỗi lưu ngân hàng: ' + error.message, true); }
+  }
+}
+
+/** Upsert 1 câu (dùng cho saveBankEdit) */
+async function saveSingleQuestion(q, subject) {
+  const { error } = await sb
+    .from('questions')
+    .upsert(qToDbRow(q, subject || currentSubject), { onConflict: 'id' });
+  if (error) { console.error('saveSingleQuestion:', error); showToast('⚠️ Lỗi lưu câu hỏi: ' + error.message, true); }
+}
+
+/** Xóa 1 câu hỏi theo id */
+async function deleteSingleQuestion(id) {
+  const { error } = await sb.from('questions').delete().eq('id', id);
+  if (error) { console.error('deleteSingleQuestion:', error); showToast('⚠️ Lỗi xóa: ' + error.message, true); }
+}
+
+/** Đếm câu hỏi tất cả môn — dùng cho subject tabs */
+async function loadAllSubjectCounts() {
+  const { data, error } = await sb.from('questions').select('subject');
+  if (error) { console.error('loadAllSubjectCounts:', error); return {}; }
+  const counts = {};
+  SUBJECTS.forEach(s => counts[s] = 0);
+  (data || []).forEach(r => { if (counts[r.subject] !== undefined) counts[r.subject]++; });
+  return counts;
+}
+
 // ══════════════════════════════════════════
 //  SUPABASE — HISTORY (bảng exam_history)
 // ══════════════════════════════════════════
@@ -360,6 +259,24 @@ async function loadHistory() {
     answered: r.answered,
     title:    r.title,
   }));
+}
+
+async function saveHistory(entries) {
+  // entries là mảng đã slice(0,200) từ showResults
+  // Chỉ insert entry đầu tiên (entry mới nhất)
+  if (!entries.length) return;
+  const e = entries[0];
+  const { error } = await sb.from('exam_history').insert({
+    id:       e.id,
+    username: e.username,
+    subject:  e.subject,
+    score:    e.score,
+    possible: e.possible,
+    total_q:  e.totalQ,
+    answered: e.answered,
+    title:    e.title,
+  });
+  if (error) console.error('saveHistory:', error);
 }
 
 // ══════════════════════════════════════════
@@ -412,11 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('hist-clear-btn').addEventListener('click', async () => {
     if (!confirm('Xóa toàn bộ lịch sử làm bài?')) return;
     showLoading('Đang xóa...');
-    if (USE_SUPABASE) {
-      await sb.from('exam_history').delete().neq('id', '__never__');
-    } else {
-      localStorage.removeItem(LS_HISTORY);
-    }
+    await sb.from('exam_history').delete().neq('id', '__never__');
     hideLoading();
     renderHistory();
   });
@@ -555,14 +468,8 @@ async function gotoDashboard() {
 async function updateLoginBadge() {
   const subject = document.getElementById('login-subject')?.value || studentInfo.subject || 'Toán';
   const badge = document.getElementById('bank-status-badge');
-  let data;
-  if (USE_SUPABASE) {
-    const res = await sb.from('questions').select('type').eq('subject', subject);
-    data = res.data;
-  } else {
-    data = _lsLoadBank(subject);
-  }
-  if (!data || !data.length) { badge.classList.add('hidden'); return; }
+  const { data, error } = await sb.from('questions').select('type').eq('subject', subject);
+  if (error || !data || !data.length) { badge.classList.add('hidden'); return; }
   const c = { mcq: 0, truefalse: 0, short: 0, matching: 0 };
   data.forEach(r => { if (c[r.type] !== undefined) c[r.type]++; });
   badge.classList.remove('hidden');
@@ -1244,10 +1151,7 @@ function handleBankImport(e) {
 async function clearBank() {
   if (!confirm(`Xóa toàn bộ ngân hàng môn "${currentSubject}"? Không thể hoàn tác.`)) return;
   showLoading('Đang xóa...');
-  if (USE_SUPABASE) {
-    await sb.from('questions').delete().eq('subject', currentSubject);
-  }
-  _lsSaveBank(currentSubject, []);
+  await sb.from('questions').delete().eq('subject', currentSubject);
   bank = [];
   hideLoading();
   buildSubjectTabs();
