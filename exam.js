@@ -42,20 +42,9 @@
  * ─────────────────────────────────────────────────
  */
 
-// ══════════════════════════════════════════
-//  ★ ĐỔI 2 DÒNG NÀY ★
-// ══════════════════════════════════════════
-const SUPABASE_URL = 'https://hksqqvkldguxwxqhqrbj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrc3FxdmtsZGd1eHd4cWhxcmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjIyMzQsImV4cCI6MjA4ODYzODIzNH0.BTvLT7zb1BkKRwK0c8ntE2tez1kuSpVkKVf_kCg5wXI';
-// ══════════════════════════════════════════
-
-// Khởi tạo Supabase client
-let sb = null;
-try {
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-} catch(e) {
-  console.error('Supabase init failed:', e);
-}
+// Client Supabase — khởi tạo từ supabase.js (window.supabase)
+// exam.js KHÔNG tự tạo client, tránh xung đột
+const sb = window.supabase;
 
 // ══════════════════════════════════════════
 //  CONSTANTS
@@ -200,16 +189,16 @@ async function loadBank(subject) {
   return (data || []).map(dbRowToQ);
 }
 
-/** Lưu toàn bộ bank (upsert nhiều row) */
+/** Lưu toàn bộ bank — upsert (không xóa dữ liệu cũ) */
 async function saveBank(subject, data) {
-  // Khi saveBank được gọi sau import / edit / delete,
-  // ta sync lại toàn bộ: xóa hết rồi insert lại
   const rows = (data || bank).map(q => qToDbRow(q, subject || currentSubject));
-  // Xóa tất cả câu của môn này
-  await sb.from('questions').delete().eq('subject', subject || currentSubject);
-  if (rows.length > 0) {
-    const { error } = await sb.from('questions').insert(rows);
-    if (error) { console.error('saveBank insert:', error); showToast('⚠️ Lỗi lưu ngân hàng: ' + error.message, true); }
+  if (!rows.length) return;
+  const BATCH = 50;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await sb
+      .from('questions')
+      .upsert(rows.slice(i, i + BATCH), { onConflict: 'id' });
+    if (error) { console.error('saveBank:', error); showToast('⚠️ Lỗi lưu: ' + error.message, true); return; }
   }
 }
 
@@ -280,17 +269,61 @@ async function saveHistory(entries) {
 }
 
 // ══════════════════════════════════════════
+//  SUPABASE CONNECTION STATUS BADGE
+// ══════════════════════════════════════════
+function createConnectionBadge() {
+  const badge = document.createElement('div');
+  badge.id = 'sb-status-badge';
+  badge.style.cssText = `
+    position:fixed;bottom:16px;left:16px;z-index:9999;
+    display:flex;align-items:center;gap:6px;
+    background:rgba(20,28,40,.85);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.1);border-radius:99px;
+    padding:5px 12px 5px 8px;cursor:pointer;
+    font-family:var(--sans,sans-serif);font-size:.72rem;font-weight:600;
+    color:#fff;transition:opacity .2s;user-select:none;
+    box-shadow:0 2px 12px rgba(0,0,0,.3);
+  `;
+  badge.innerHTML = `<span id="sb-dot" style="width:8px;height:8px;border-radius:50%;background:#f5a623;display:inline-block;flex-shrink:0"></span><span id="sb-label">Đang kết nối...</span>`;
+  badge.title = 'Trạng thái Supabase — click để thử lại';
+  badge.addEventListener('click', checkSupabaseConnection);
+  document.body.appendChild(badge);
+}
+
+async function checkSupabaseConnection() {
+  const dot   = document.getElementById('sb-dot');
+  const label = document.getElementById('sb-label');
+  if (!dot) return;
+  dot.style.background = '#f5a623';
+  label.textContent = 'Đang kiểm tra...';
+  try {
+    if (!sb) throw new Error('Chưa khởi tạo');
+    const { error } = await sb.from('questions').select('id').limit(1);
+    if (error) throw error;
+    dot.style.background = '#38d690';
+    label.textContent = 'Supabase ✓';
+  } catch(e) {
+    dot.style.background = '#e53e3e';
+    label.textContent = 'Mất kết nối';
+    console.error('Supabase connection error:', e);
+  }
+}
+
+// ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
+  createConnectionBadge();
+  checkSupabaseConnection();
 
-  showLoading('Đang kết nối Supabase...');
+  showLoading('Đang tải ngân hàng câu hỏi...');
   try {
+    if (!sb) throw new Error('Supabase chưa khởi tạo');
     bank = await loadBank(currentSubject);
   } catch(e) {
     console.error(e);
-    showToast('⚠️ Không kết nối được Supabase. Kiểm tra URL / Key.', true);
+    showToast('⚠️ Không tải được ngân hàng. Kiểm tra kết nối.', true);
   }
   hideLoading();
 
@@ -1106,11 +1139,12 @@ function saveAnswerKey() {
 }
 
 // ══════════════════════════════════════════
-//  BANK IMPORT — GÁN ID + LƯU THEO MÔN
+//  BANK IMPORT — UPSERT TỪNG CÂU LÊN SUPABASE
 // ══════════════════════════════════════════
 function handleBankImport(e) {
   const files = [...e.target.files];
-  let added = 0, errors = [];
+  if (!files.length) return;
+  let totalAdded = 0, totalSkipped = 0, errors = [];
   let pending = files.length;
 
   files.forEach(file => {
@@ -1119,27 +1153,48 @@ function handleBankImport(e) {
       try {
         let data = JSON.parse(ev.target.result);
         let qs = [];
-        if (Array.isArray(data)) qs = data;
-        else if (Array.isArray(data.questions)) qs = data.questions;
+        if (Array.isArray(data))                 qs = data;
+        else if (Array.isArray(data.questions))  qs = data.questions;
         else throw new Error('Không tìm thấy mảng questions');
 
-        const valid = ['truefalse','mcq','matching','short'];
+        const valid = ['truefalse', 'mcq', 'matching', 'short'];
+        const rows = [];
         qs.forEach(q => {
-          if (valid.includes(q.type) && q.question) {
-            if (!q.id) q.id = uid();
-            bank.push({ ...q });
-            added++;
-          }
+          if (!valid.includes(q.type) || !q.question) { totalSkipped++; return; }
+          if (!q.id) q.id = uid();
+          rows.push(qToDbRow({ ...q }, currentSubject));
+          bank.push({ ...q });
+          totalAdded++;
         });
-      } catch(err) { errors.push(`${file.name}: ${err.message}`); }
+
+        if (rows.length > 0) {
+          showLoading(`Đang lưu ${rows.length} câu lên Supabase...`);
+          // Upsert từng batch 50 câu — không xóa dữ liệu cũ
+          const BATCH = 50;
+          for (let i = 0; i < rows.length; i += BATCH) {
+            const { error } = await sb
+              .from('questions')
+              .upsert(rows.slice(i, i + BATCH), { onConflict: 'id' });
+            if (error) throw error;
+          }
+          hideLoading();
+        }
+      } catch(err) {
+        hideLoading();
+        errors.push(`${file.name}: ${err.message}`);
+      }
+
       pending--;
       if (pending === 0) {
-        showLoading(`Đang lưu ${added} câu lên Supabase...`);
-        await saveBank(currentSubject, bank);
-        hideLoading();
+        // Reload bank từ Supabase để đảm bảo đồng bộ
+        bank = await loadBank(currentSubject);
         buildSubjectTabs();
         renderBankList();
-        showToast(added > 0 ? `✓ Đã thêm ${added} câu vào ngân hàng [${currentSubject}]` : '⚠️ Không thêm được câu nào');
+        checkSupabaseConnection();
+        if (totalAdded > 0)
+          showToast(`✓ Đã upsert ${totalAdded} câu vào [${currentSubject}]${totalSkipped ? ` (bỏ qua ${totalSkipped})` : ''}`);
+        else
+          showToast('⚠️ Không thêm được câu nào', true);
         if (errors.length) showToast('⚠️ ' + errors.join('; '), true);
       }
     };
