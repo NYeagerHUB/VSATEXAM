@@ -162,7 +162,18 @@ body{font-family:var(--sans);background:var(--body-bg);color:var(--text);transit
 }
 .ph-btn:hover{opacity:.8}
 .ph-import{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ph-pdf{background:#e53e3e;color:#fff;border-color:#e53e3e}
 .ph-danger{color:var(--danger);border-color:var(--danger)}
+
+/* Hình ảnh inline trong câu hỏi */
+.q-inline-img{
+  display:block;max-width:100%;max-height:340px;
+  object-fit:contain;border-radius:8px;
+  margin:.6rem auto;border:1px solid var(--border);
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+}
+.q-text .q-inline-img, .tf-stmt .q-inline-img,
+.mcq-text-wrap .q-inline-img, .match-col .q-inline-img { margin:.4rem 0; }
 
 /* Bank stats row */
 .bank-stats-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem}

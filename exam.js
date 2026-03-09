@@ -51,7 +51,7 @@ const sb = window.supabase;
 // ══════════════════════════════════════════
 const LS_CONFIG = 'vsat_config_v2';   // config vẫn giữ localStorage
 
-const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý',"Tiếng Anh"];
+const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý'];
 
 const DEFAULT_CONFIG = { mcq: 6, truefalse: 9, short: 5, matching: 5, time: 90 };
 // 6+9+5+5 = 25 câu × 6đ = 150đ max
@@ -85,7 +85,13 @@ function escH(s) {
 }
 
 // Để render LaTeX, KHÔNG escape — dùng hàm này cho nội dung câu hỏi/đáp án
-function safe(s) { return String(s || ''); }
+// Tự động render [IMG:url] thành thẻ <img>
+function safe(s) {
+  return String(s || '').replace(
+    /\[IMG:(https?:\/\/[^\]]+)\]/g,
+    (_, url) => `<img src="${url}" alt="Hình minh họa" class="q-inline-img" onerror="this.style.display='none'" loading="lazy"/>`
+  );
+}
 
 const pad   = n => String(n).padStart(2, '0');
 const ALPHA = ['A','B','C','D','E','F','G','H'];
@@ -301,7 +307,7 @@ async function checkSupabaseConnection() {
     const { error } = await sb.from('questions').select('id').limit(1);
     if (error) throw error;
     dot.style.background = '#38d690';
-    label.textContent = '';
+    label.textContent = 'Supabase ✓';
   } catch(e) {
     dot.style.background = '#e53e3e';
     label.textContent = 'Mất kết nối';
@@ -345,6 +351,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('bank-file-input').click()
   );
   document.getElementById('bank-file-input').addEventListener('change', handleBankImport);
+  document.getElementById('bank-pdf-btn').addEventListener('click', () =>
+    document.getElementById('bank-pdf-input').click()
+  );
+  document.getElementById('bank-pdf-input').addEventListener('change', handlePdfImport);
   document.getElementById('bank-clear-btn').addEventListener('click', clearBank);
   document.getElementById('bank-filter-type').addEventListener('change', renderBankList);
   document.getElementById('bank-search').addEventListener('input', renderBankList);
@@ -1201,6 +1211,205 @@ function handleBankImport(e) {
     reader.readAsText(file, 'UTF-8');
   });
   e.target.value = '';
+}
+
+// ══════════════════════════════════════════
+//  PDF IMPORT → AI PARSE → SUPABASE
+// ══════════════════════════════════════════
+
+// Modal hiển thị kết quả AI parse trước khi lưu
+function showPdfReviewModal(questions, filename) {
+  let modal = document.getElementById('pdf-review-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pdf-review-modal';
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:8000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)`;
+    document.body.appendChild(modal);
+  }
+
+  const typeCount = { mcq:0, truefalse:0, short:0, matching:0 };
+  questions.forEach(q => { if(typeCount[q.type]!==undefined) typeCount[q.type]++; });
+
+  modal.innerHTML = `
+    <div style="background:var(--content-bg,#fff);border-radius:14px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="padding:1.2rem 1.4rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:1rem;font-weight:700;color:var(--text)">🤖 AI đã phân tích xong</div>
+          <div style="font-size:.78rem;color:var(--text-muted);margin-top:.2rem">${filename}</div>
+        </div>
+        <button onclick="closePdfReview()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-muted)">✕</button>
+      </div>
+
+      <div style="padding:1rem 1.4rem;border-bottom:1px solid var(--border);display:flex;gap:.8rem;flex-wrap:wrap">
+        <span style="background:var(--accent-soft,#e8f4fd);color:var(--accent);padding:.3rem .8rem;border-radius:99px;font-size:.78rem;font-weight:700">
+          Tổng: ${questions.length} câu
+        </span>
+        ${typeCount.truefalse ? `<span style="background:#e8fdf0;color:#16a34a;padding:.3rem .8rem;border-radius:99px;font-size:.78rem;font-weight:600">Đ/S: ${typeCount.truefalse}</span>` : ''}
+        ${typeCount.mcq ? `<span style="background:#fff7e6;color:#d97706;padding:.3rem .8rem;border-radius:99px;font-size:.78rem;font-weight:600">TN: ${typeCount.mcq}</span>` : ''}
+        ${typeCount.matching ? `<span style="background:#f3e8ff;color:#7c3aed;padding:.3rem .8rem;border-radius:99px;font-size:.78rem;font-weight:600">Ghép: ${typeCount.matching}</span>` : ''}
+        ${typeCount.short ? `<span style="background:#fef2f2;color:#dc2626;padding:.3rem .8rem;border-radius:99px;font-size:.78rem;font-weight:600">TLN: ${typeCount.short}</span>` : ''}
+      </div>
+
+      <div id="pdf-review-list" style="flex:1;overflow-y:auto;padding:1rem 1.4rem">
+        ${questions.map((q,i) => `
+          <div style="border:1px solid var(--border);border-radius:8px;padding:.8rem;margin-bottom:.6rem;font-size:.8rem">
+            <div style="display:flex;gap:.5rem;align-items:flex-start;margin-bottom:.4rem">
+              <span style="background:var(--q-alt-bg);padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:700;color:var(--text-muted);flex-shrink:0">${typeFull(q.type)}</span>
+              <span style="color:var(--text);line-height:1.4">${safe(q.question).slice(0,120)}${q.question.length>120?'…':''}</span>
+            </div>
+            <div style="color:var(--text-muted);font-size:.72rem">
+              ${q.type==='truefalse'&&q.statements ? `${q.statements.length} mệnh đề · ${q.answers?.filter(Boolean).length||0} có đáp án` : ''}
+              ${q.type==='mcq'&&q.options ? `${q.options.length} phương án · ${q.answer!=null?'Có đáp án':'Chưa có đáp án'}` : ''}
+              ${q.type==='matching'&&q.left ? `${q.left.length} cặp ghép · ${q.answers?.some(v=>v!=null)?'Có đáp án':'Chưa có đáp án'}` : ''}
+              ${q.type==='short' ? (q.answer!=null&&q.answer!==''?`Đáp án: ${q.answer}`:'Chưa có đáp án') : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="padding:1rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
+        <button onclick="closePdfReview()" style="padding:.5rem 1.2rem;border-radius:8px;border:1.5px solid var(--border);background:none;color:var(--text-muted);font-size:.84rem;cursor:pointer;font-family:var(--sans)">Hủy</button>
+        <button onclick="confirmPdfImport()" id="pdf-confirm-btn" style="padding:.5rem 1.4rem;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--sans)">
+          ✓ Lưu ${questions.length} câu vào [${currentSubject}]
+        </button>
+      </div>
+    </div>`;
+
+  modal.style.display = 'flex';
+}
+
+function closePdfReview() {
+  const m = document.getElementById('pdf-review-modal');
+  if (m) m.style.display = 'none';
+  window._pdfParsedQuestions = null;
+}
+
+async function confirmPdfImport() {
+  const questions = window._pdfParsedQuestions;
+  if (!questions?.length) return;
+
+  document.getElementById('pdf-confirm-btn').textContent = 'Đang lưu...';
+  document.getElementById('pdf-confirm-btn').disabled = true;
+
+  const rows = questions.map(q => qToDbRow({ ...q, id: q.id || uid() }, currentSubject));
+  const BATCH = 50;
+  let ok = true;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await sb.from('questions').upsert(rows.slice(i, i+BATCH), { onConflict:'id' });
+    if (error) { showToast('⚠️ Lỗi lưu: ' + error.message, true); ok = false; break; }
+  }
+
+  if (ok) {
+    bank = await loadBank(currentSubject);
+    buildSubjectTabs();
+    renderBankList();
+    showToast(`✓ Đã lưu ${questions.length} câu từ PDF vào [${currentSubject}]`);
+    checkSupabaseConnection();
+  }
+
+  closePdfReview();
+}
+
+async function handlePdfImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
+    showToast('⚠️ Vui lòng chọn file PDF', true);
+    return;
+  }
+
+  showLoading('🤖 AI đang đọc PDF...');
+
+  try {
+    // Convert PDF to base64
+    const base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = () => rej(new Error('Không đọc được file'));
+      r.readAsDataURL(file);
+    });
+
+    const systemPrompt = `Bạn là hệ thống phân tích đề thi VSAT của Đại học Cần Thơ. Hãy đọc file PDF đề thi và trích xuất TẤT CẢ câu hỏi.
+
+ĐỊNH DẠNG OUTPUT: Chỉ trả về JSON array thuần túy, không có markdown, không có backtick, không có giải thích.
+
+CẤU TRÚC MỖI CÂU:
+- Câu Đúng/Sai (từ câu 01-09): {"id":"auto","type":"truefalse","question":"Nội dung dẫn câu","statements":["mệnh đề 1","mệnh đề 2","mệnh đề 3","mệnh đề 4"],"answers":["D","S","D","S"]}
+- Câu MCQ (từ câu 10-15): {"id":"auto","type":"mcq","question":"Nội dung câu hỏi","options":["A. ...","B. ...","C. ...","D. ..."],"answer":0}
+  (answer là index 0-3 tương ứng A-D)
+- Câu ghép cột (từ câu 16-20): {"id":"auto","type":"matching","question":"Nội dung","left":["ý 1","ý 2","ý 3","ý 4"],"right":["A. ...","B. ...","C. ...","D. ...","E. ...","F. ..."],"answers":[indexA,indexB,indexC,indexD]}
+  (answers là array index 0-based của cột phải tương ứng với từng ý cột trái)
+- Câu trả lời ngắn (từ câu 21-25): {"id":"auto","type":"short","question":"Nội dung câu hỏi","answer":"đáp án số"}
+
+QUY TẮC:
+- Nếu câu có hình ảnh/sơ đồ không đọc được, ghi "[IMG:PLACEHOLDER]" vào question
+- Giữ nguyên ký hiệu hóa học: H₂SO₄, Fe²⁺, NH₃, v.v. (dùng unicode subscript/superscript)
+- Giữ nguyên công thức toán: dùng LaTeX nếu cần, ví dụ \\(x^2\\)
+- answers cho truefalse: "D" = Đúng, "S" = Sai, null nếu không rõ
+- Trích xuất ĐẦY ĐỦ tất cả 25 câu
+- Không thêm bất kỳ trường nào khác ngoài schema trên`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8000,
+        system: systemPrompt,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+            },
+            {
+              type: 'text',
+              text: `Hãy trích xuất tất cả câu hỏi từ đề thi này. Trả về JSON array thuần túy.`
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || `API error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const raw = data.content.map(c => c.text || '').join('');
+
+    // Parse JSON — bỏ markdown nếu có
+    const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    let questions;
+    try {
+      questions = JSON.parse(clean);
+    } catch {
+      // Thử tìm array trong text
+      const m = clean.match(/\[[\s\S]*\]/);
+      if (m) questions = JSON.parse(m[0]);
+      else throw new Error('AI không trả về JSON hợp lệ');
+    }
+
+    if (!Array.isArray(questions) || !questions.length) {
+      throw new Error('Không tìm thấy câu hỏi nào trong file');
+    }
+
+    // Gán ID nếu thiếu
+    questions.forEach(q => { if (!q.id || q.id === 'auto') q.id = uid(); });
+
+    hideLoading();
+    window._pdfParsedQuestions = questions;
+    showPdfReviewModal(questions, file.name);
+
+  } catch(err) {
+    hideLoading();
+    console.error('PDF import error:', err);
+    showToast('⚠️ Lỗi AI parse: ' + err.message, true);
+  }
 }
 
 async function clearBank() {
