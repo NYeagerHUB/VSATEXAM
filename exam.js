@@ -182,8 +182,10 @@ function dbRowToQ(row) {
                    ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
                    : undefined,
     placeholder: row.placeholder || undefined,
-    image_url:    row.image_url   || undefined,
-    table_data:   row.table_data  || undefined,
+    image_url:    row.image_url    || undefined,
+    table_data:   row.table_data   || undefined,
+    passage_id:   row.passage_id   || undefined,
+    passage_text: row.passage_text || undefined,
   };
 }
 
@@ -203,6 +205,8 @@ function qToDbRow(q, subject) {
     placeholder: q.placeholder || null,
     image_url:    q.image_url    || null,
     table_data:   q.table_data   || null,
+    passage_id:   q.passage_id   || null,
+    passage_text: q.passage_text || null,
   };
 }
 
