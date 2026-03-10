@@ -19,16 +19,30 @@
  * SQL SCHEMA — chạy 1 lần trong Supabase SQL Editor:
  * ─────────────────────────────────────────────────
  * create table questions (
- *   id          text primary key,
- *   subject     text not null,
- *   type        text not null,
- *   question    text not null,
- *   options     jsonb, statements jsonb,
- *   left_col    jsonb, right_col  jsonb,
- *   answers     jsonb, answer     text,
- *   placeholder text,
- *   created_at  timestamptz default now()
+ *   id           text primary key,
+ *   subject      text not null,
+ *   type         text not null,
+ *   question     text not null,
+ *   options      jsonb, statements jsonb,
+ *   left_col     jsonb, right_col  jsonb,
+ *   answers      jsonb, answer     text,
+ *   placeholder  text,
+ *   image_url    text,
+ *   table_data   jsonb,
+ *   passage_id   text,
+ *   passage_text text,
+ *   created_at   timestamptz default now()
  * );
+ * -- Thêm columns mới nếu table đã có:
+ * alter table questions add column if not exists image_url    text;
+ * alter table questions add column if not exists table_data   jsonb;
+ * alter table questions add column if not exists passage_id   text;
+ * alter table questions add column if not exists passage_text text;
+ * -- Storage bucket (chạy 1 lần):
+ * insert into storage.buckets(id,name,public) values('question-images','question-images',true);
+ * create policy "pub_read"   on storage.objects for select using (bucket_id='question-images');
+ * create policy "pub_upload" on storage.objects for insert with check(bucket_id='question-images');
+ * create policy "pub_delete" on storage.objects for delete using (bucket_id='question-images');
  * create table exam_history (
  *   id         text primary key,
  *   username   text, subject text,
@@ -170,35 +184,43 @@ function hideLoading() {
 /** Chuyển DB row → app question object */
 function dbRowToQ(row) {
   return {
-    id:          row.id,
-    type:        row.type,
-    question:    row.question,
-    options:     row.options     || undefined,
-    statements:  row.statements  || undefined,
-    left:        row.left_col    || undefined,
-    right:       row.right_col   || undefined,
-    answers:     row.answers     || undefined,
-    answer:      row.answer != null
-                   ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
-                   : undefined,
-    placeholder: row.placeholder || undefined,
+    id:           row.id,
+    type:         row.type,
+    question:     row.question,
+    options:      row.options      || undefined,
+    statements:   row.statements   || undefined,
+    left:         row.left_col     || undefined,
+    right:        row.right_col    || undefined,
+    answers:      row.answers      || undefined,
+    answer:       row.answer != null
+                    ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
+                    : undefined,
+    placeholder:  row.placeholder  || undefined,
+    image_url:    row.image_url    || undefined,
+    table_data:   row.table_data   || undefined,
+    passage_id:   row.passage_id   || undefined,
+    passage_text: row.passage_text || undefined,
   };
 }
 
 /** Chuyển app question object → DB row */
 function qToDbRow(q, subject) {
   return {
-    id:          q.id,
-    subject:     subject,
-    type:        q.type,
-    question:    q.question,
-    options:     q.options     || null,
-    statements:  q.statements  || null,
-    left_col:    q.left        || null,
-    right_col:   q.right       || null,
-    answers:     q.answers     || null,
-    answer:      (q.answer !== null && q.answer !== undefined) ? String(q.answer) : null,
-    placeholder: q.placeholder || null,
+    id:           q.id,
+    subject:      subject,
+    type:         q.type,
+    question:     q.question,
+    options:      q.options      || null,
+    statements:   q.statements   || null,
+    left_col:     q.left         || null,
+    right_col:    q.right        || null,
+    answers:      q.answers      || null,
+    answer:       (q.answer !== null && q.answer !== undefined) ? String(q.answer) : null,
+    placeholder:  q.placeholder  || null,
+    image_url:    q.image_url    || null,
+    table_data:   q.table_data   || null,
+    passage_id:   q.passage_id   || null,
+    passage_text: q.passage_text || null,
   };
 }
 
@@ -292,59 +314,17 @@ async function saveHistory(entries) {
   if (error) console.error('saveHistory:', error);
 }
 
-// ══════════════════════════════════════════
-//  SUPABASE CONNECTION STATUS BADGE
-// ══════════════════════════════════════════
-function createConnectionBadge() {
-  const badge = document.createElement('div');
-  badge.id = 'sb-status-badge';
-  badge.style.cssText = `
-    position:fixed;bottom:16px;left:16px;z-index:9999;
-    display:flex;align-items:center;gap:6px;
-    background:rgba(20,28,40,.85);backdrop-filter:blur(6px);
-    border:1px solid rgba(255,255,255,.1);border-radius:99px;
-    padding:5px 12px 5px 8px;cursor:pointer;
-    font-family:var(--sans,sans-serif);font-size:.72rem;font-weight:600;
-    color:#fff;transition:opacity .2s;user-select:none;
-    box-shadow:0 2px 12px rgba(0,0,0,.3);
-  `;
-  badge.innerHTML = `<span id="sb-dot" style="width:8px;height:8px;border-radius:50%;background:#f5a623;display:inline-block;flex-shrink:0"></span><span id="sb-label">Đang kết nối...</span>`;
-  badge.title = 'Trạng thái Supabase — click để thử lại';
-  badge.addEventListener('click', checkSupabaseConnection);
-  document.body.appendChild(badge);
-}
-
-async function checkSupabaseConnection() {
-  const dot   = document.getElementById('sb-dot');
-  const label = document.getElementById('sb-label');
-  if (!dot) return;
-  dot.style.background = '#f5a623';
-  label.textContent = 'Đang kiểm tra...';
-  try {
-    if (!sb) throw new Error('Chưa khởi tạo');
-    const { error } = await sb.from('questions').select('id').limit(1);
-    if (error) throw error;
-    dot.style.background = '#38d690';
-    label.textContent = '';
-  } catch(e) {
-    dot.style.background = '#e53e3e';
-    label.textContent = 'Mất kết nối';
-    console.error('Supabase connection error:', e);
-  }
-}
 
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
-  createConnectionBadge();
-  checkSupabaseConnection();
 
   // Mặc định vào login screen
   showScreen('login-screen');
   // Tạo mã thi ngay
-  const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
+  const code = 'CTU' + String(Math.floor(1000000000 + Math.random() * 9000000000));
   const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
   document.getElementById('info-account').textContent  = code;
   document.getElementById('info-password').textContent = pass;
@@ -430,6 +410,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderBankList();
   renderConfigTab();
   renderHistory();
+
+  // Gemini AI chat
+  document.getElementById('gemini-send-btn')?.addEventListener('click', sendGeminiMessage);
+  document.getElementById('gemini-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGeminiMessage(); }
+  });
+  document.getElementById('gemini-clear-btn')?.addEventListener('click', clearGeminiChat);
 });
 
 // ══════════════════════════════════════════
@@ -643,12 +630,45 @@ function drawFromBank(subjectBank) {
   if (errors.length) return { error: 'Không đủ câu: ' + errors.join('; ') };
 
   const shuffle = arr => [...arr].sort(() => Math.random() - .5);
+
+  // Tách nhóm ngữ liệu (passage) vs câu độc lập
+  function pickWithPassages(pool, count) {
+    if (!count) return [];
+    // Nhóm theo passage_id
+    const groups = new Map();  // passage_id → questions[]
+    const loners = [];
+    pool.forEach(q => {
+      if (q.passage_id) {
+        if (!groups.has(q.passage_id)) groups.set(q.passage_id, []);
+        groups.get(q.passage_id).push(q);
+      } else loners.push(q);
+    });
+    // Xáo trộn loners và groups
+    const shuffledLoners  = shuffle(loners);
+    const shuffledGroups  = shuffle([...groups.values()]);
+    const result = [];
+    let remaining = count;
+    // Ưu tiên lấy groups trước
+    for (const grp of shuffledGroups) {
+      if (remaining <= 0) break;
+      result.push(...grp);
+      remaining -= grp.length;
+    }
+    // Bổ sung loners nếu chưa đủ
+    for (const q of shuffledLoners) {
+      if (remaining <= 0) break;
+      result.push(q);
+      remaining--;
+    }
+    return result;
+  }
+
   let qs = [];
   // Thứ tự CỐ ĐỊNH: Đúng/Sai (1-9) → TN (10-15) → Ghép cột (16-20) → TLN (21-25)
-  if (need.truefalse > 0) qs.push(...shuffle(byType.truefalse).slice(0, need.truefalse));
-  if (need.mcq       > 0) qs.push(...shuffle(byType.mcq).slice(0, need.mcq));
-  if (need.matching  > 0) qs.push(...shuffle(byType.matching).slice(0, need.matching));
-  if (need.short     > 0) qs.push(...shuffle(byType.short).slice(0, need.short));
+  if (need.truefalse > 0) qs.push(...pickWithPassages(byType.truefalse, need.truefalse));
+  if (need.mcq       > 0) qs.push(...pickWithPassages(byType.mcq, need.mcq));
+  if (need.matching  > 0) qs.push(...pickWithPassages(byType.matching, need.matching));
+  if (need.short     > 0) qs.push(...pickWithPassages(byType.short, need.short));
   return qs; // KHÔNG shuffle final — giữ đúng thứ tự phần
 }
 
@@ -703,13 +723,18 @@ function renderAllQuestions() {
     const block = document.createElement('div');
     block.className = 'question-block';
     block.id = `q-block-${i}`;
+    // Passage header (ngữ liệu) — chỉ hiện khi câu đầu tiên của nhóm
+    const passageHTML = buildPassageHTML(q, i);
+
     block.innerHTML = `
       <div class="q-block-header">
         <span class="q-block-title">Câu ${i+1}</span>
         <button class="q-pin-btn" data-idx="${i}">📌</button>
       </div>
+      ${passageHTML}
       <div class="q-block-body">
         <div class="q-text">${safe(q.question)}</div>
+        ${buildQuestionExtras(q)}
         ${buildAnswerHTML(q, i)}
       </div>`;
     body.appendChild(block);
@@ -725,6 +750,50 @@ function renderAllQuestions() {
 
   // Render LaTeX cho toàn bộ exam body
   renderMath(body);
+}
+
+
+// ── PASSAGE (ngữ liệu chung cho nhóm câu) ──
+function buildPassageHTML(q, i) {
+  if (!q.passage_text) return '';
+  // Only show passage on FIRST question of the group
+  const prevQ = i > 0 ? examData.questions[i - 1] : null;
+  if (prevQ && prevQ.passage_id && prevQ.passage_id === q.passage_id) return '';
+  // Count how many questions share this passage
+  const groupCount = examData.questions.filter(qq => qq.passage_id === q.passage_id).length;
+  return `<div class="q-passage-box">
+    <div class="q-passage-label">📖 Ngữ liệu chung (${groupCount} câu)</div>
+    <div class="q-passage-text">${safe(q.passage_text)}</div>
+  </div>`;
+}
+
+// ── IMAGE + TABLE extras after question text ──
+function buildQuestionExtras(q) {
+  let html = '';
+  if (q.image_url) {
+    html += `<div class="question-image">
+      <img src="${q.image_url}" alt="Hình minh họa" loading="lazy"
+           onerror="this.parentElement.style.display='none'"/>
+    </div>`;
+  }
+  if (q.table_data) {
+    html += renderTable(q.table_data);
+  }
+  return html;
+}
+
+function renderTable(data) {
+  if (!data || !data.headers || !data.rows) return '';
+  let html = '<div class="question-table-wrap"><table class="question-table"><thead><tr>';
+  data.headers.forEach(h => { html += `<th>${safe(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+  data.rows.forEach(r => {
+    html += '<tr>';
+    r.forEach(c => { html += `<td>${safe(c)}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
 }
 
 function buildAnswerHTML(q, i) {
@@ -1226,8 +1295,7 @@ function handleBankImport(e) {
         bank = await loadBank(currentSubject);
         buildSubjectTabs();
         renderBankList();
-        checkSupabaseConnection();
-        if (totalAdded > 0)
+            if (totalAdded > 0)
           showToast(`✓ Đã upsert ${totalAdded} câu vào [${currentSubject}]${totalSkipped ? ` (bỏ qua ${totalSkipped})` : ''}`);
         else
           showToast('⚠️ Không thêm được câu nào', true);
@@ -1336,7 +1404,6 @@ async function confirmPdfImport() {
     buildSubjectTabs();
     renderBankList();
     showToast(`✓ Đã lưu ${questions.length} câu từ PDF vào [${currentSubject}]`);
-    checkSupabaseConnection();
   }
 
   closePdfReview();
@@ -1578,6 +1645,22 @@ function getKeyPreview(q) {
   return '';
 }
 
+
+// ══════════════════════════════════════════
+//  SUPABASE STORAGE — IMAGE UPLOAD
+// ══════════════════════════════════════════
+async function uploadQuestionImage(file) {
+  if (!file) return null;
+  const ext   = file.name.split('.').pop().toLowerCase();
+  const path  = `questions/${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+  const { data, error } = await sb.storage
+    .from('question-images')
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (error) { showToast('⚠️ Upload ảnh lỗi: ' + error.message, true); return null; }
+  const { data: urlData } = sb.storage.from('question-images').getPublicUrl(path);
+  return urlData?.publicUrl || null;
+}
+
 // ══════════════════════════════════════════
 //  BANK EDIT MODAL
 // ══════════════════════════════════════════
@@ -1635,8 +1718,51 @@ function openBankEdit(idx) {
       }"/></div>`;
   }
 
+  // ── SHARED: image, table, passage ──
+  html += `<hr style="border:none;border-top:1px solid var(--border);margin:.8rem 0"/>`;
+  html += `<div class="bedit-group">
+    <label class="bedit-label">🖼 Hình ảnh minh họa (URL hoặc upload)</label>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <input class="bedit-input" id="bedit-image-url" value="${escH(q.image_url||'')}" placeholder="https://..." style="flex:1;min-width:200px"/>
+      <label class="bedit-img-upload-btn" for="bedit-img-file" style="cursor:pointer;padding:.42rem .8rem;border-radius:var(--radius);border:1.5px solid var(--border);font-size:.8rem;font-weight:600;color:var(--text);background:var(--q-alt-bg);white-space:nowrap">
+        📁 Upload
+      </label>
+      <input type="file" id="bedit-img-file" accept="image/*" style="display:none" onchange="previewBankEditImage(this)"/>
+    </div>
+    ${q.image_url ? `<img src="${q.image_url}" style="max-width:100%;max-height:180px;border-radius:6px;margin-top:.5rem;border:1px solid var(--border);object-fit:contain" id="bedit-img-preview" onerror="this.style.display='none'"/>` : '<img id="bedit-img-preview" style="display:none;max-width:100%;max-height:180px;border-radius:6px;margin-top:.5rem;border:1px solid var(--border);object-fit:contain"/>'}
+  </div>`;
+  html += `<div class="bedit-group">
+    <label class="bedit-label">📊 Bảng số liệu (JSON — để trống nếu không có)</label>
+    <textarea class="bedit-textarea" id="bedit-table" style="font-family:var(--mono);font-size:.78rem;min-height:80px">${q.table_data ? escH(JSON.stringify(q.table_data, null, 2)) : ''}</textarea>
+    <div style="font-size:.7rem;color:var(--text-muted);margin-top:.25rem">Ví dụ: {"headers":["Khoảng","Tần số"],"rows":[["0-2","3"],["2-4","5"]]}</div>
+  </div>`;
+  html += `<div class="bedit-group">
+    <label class="bedit-label">🔗 Nhóm ngữ liệu — Passage ID (để trống nếu không có)</label>
+    <div style="display:flex;gap:.5rem">
+      <input class="bedit-input" id="bedit-passage-id" value="${escH(q.passage_id||'')}" placeholder="Ví dụ: passage_001" style="flex:1"/>
+      <button onclick="document.getElementById('bedit-passage-id').value=uid()" style="padding:.42rem .8rem;border-radius:var(--radius);border:1.5px solid var(--border);background:var(--q-alt-bg);font-size:.78rem;cursor:pointer;color:var(--text);font-family:var(--sans)">🆕 Tạo ID</button>
+    </div>
+  </div>`;
+  html += `<div class="bedit-group">
+    <label class="bedit-label">📖 Nội dung ngữ liệu (để trống nếu không có)</label>
+    <textarea class="bedit-textarea" id="bedit-passage-text" style="min-height:80px">${escH(q.passage_text||'')}</textarea>
+    <div style="font-size:.7rem;color:var(--text-muted);margin-top:.25rem">Ngữ liệu chung cho các câu hỏi trong cùng nhóm. Khi bốc đề sẽ lấy nguyên cả nhóm.</div>
+  </div>`;
+
   document.getElementById('bank-edit-body').innerHTML = html;
   document.getElementById('bank-edit-modal').classList.remove('hidden');
+}
+
+function previewBankEditImage(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('bedit-img-preview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    preview.dataset.pending = '1';  // mark as needing upload
+  };
+  reader.readAsDataURL(file);
 }
 function closeBankEdit() {
   document.getElementById('bank-edit-modal').classList.add('hidden');
@@ -1670,6 +1796,30 @@ async function saveBankEdit() {
     q.answers = raw.map(s => { const i = ALPHA.indexOf(s); return i >= 0 ? i : null; });
   }
 
+  // Save image (upload if pending file)
+  const imgFile   = document.getElementById('bedit-img-file')?.files[0];
+  const imgPreview = document.getElementById('bedit-img-preview');
+  let imgUrl = document.getElementById('bedit-image-url')?.value.trim() || null;
+  if (imgFile && imgPreview?.dataset.pending === '1') {
+    showLoading('Đang upload ảnh...');
+    const uploaded = await uploadQuestionImage(imgFile);
+    hideLoading();
+    if (uploaded) imgUrl = uploaded;
+  }
+  q.image_url = imgUrl || null;
+
+  // Save table data
+  const tableRaw = document.getElementById('bedit-table')?.value.trim();
+  if (tableRaw) {
+    try { q.table_data = JSON.parse(tableRaw); } catch { showToast('⚠️ JSON bảng số liệu không hợp lệ', true); return; }
+  } else { q.table_data = null; }
+
+  // Save passage
+  q.passage_id   = document.getElementById('bedit-passage-id')?.value.trim() || null;
+  q.passage_text = document.getElementById('bedit-passage-text')?.value.trim() || null;
+  // If passage_text set but no id, auto-generate
+  if (q.passage_text && !q.passage_id) q.passage_id = uid();
+
   bank[bankEditIdx] = q;
   closeBankEdit();
   showLoading('Đang lưu...');
@@ -1677,6 +1827,68 @@ async function saveBankEdit() {
   hideLoading();
   renderBankList();
   showToast('✓ Đã lưu câu hỏi');
+}
+
+
+// ══════════════════════════════════════════
+//  GEMINI AI CHAT PANEL
+// ══════════════════════════════════════════
+let geminiChatHistory = [];
+
+async function sendGeminiMessage() {
+  const input = document.getElementById('gemini-input');
+  const msg   = (input?.value || '').trim();
+  if (!msg) return;
+  input.value = '';
+
+  appendGeminiMsg('user', msg);
+  geminiChatHistory.push({ role: 'user', parts: [{ text: msg }] });
+
+  const btn = document.getElementById('gemini-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  try {
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: geminiChatHistory })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi server');
+    const reply = data.reply || '';
+    appendGeminiMsg('assistant', reply);
+    geminiChatHistory.push({ role: 'model', parts: [{ text: reply }] });
+  } catch (err) {
+    appendGeminiMsg('assistant', '⚠️ Lỗi: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Gửi'; }
+  }
+}
+
+function appendGeminiMsg(role, text) {
+  const body = document.getElementById('gemini-chat-body');
+  if (!body) return;
+  const div = document.createElement('div');
+  div.className = `gemini-msg gemini-msg-${role}`;
+  // Simple markdown-lite: bold, code
+  const html = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\n/g,'<br>');
+  div.innerHTML = `<div class="gemini-bubble">${html}</div>`;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearGeminiChat() {
+  geminiChatHistory = [];
+  const body = document.getElementById('gemini-chat-body');
+  if (body) body.innerHTML = `<div class="gemini-welcome">
+    <div style="font-size:1.8rem;margin-bottom:.4rem">🤖</div>
+    <div style="font-weight:700;margin-bottom:.3rem">Trợ lý AI Gemini</div>
+    <div style="font-size:.83rem;color:var(--text-muted)">Hỏi bất cứ điều gì về bài thi, môn học, hoặc nhờ giải thích đáp án.</div>
+  </div>`;
 }
 
 // ══════════════════════════════════════════
