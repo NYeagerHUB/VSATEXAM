@@ -23,7 +23,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>VSAT – Thi Thử Trực Tuyến</title>
+  <title>VSAT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
@@ -40,15 +40,15 @@
     <aside class="dash-sidebar">
       <div class="dash-logo">
         <span class="dash-logo-icon"></span>
-        <span class="dash-logo-text">VSAT Thi Thử</span>
+        <span class="dash-logo-text">VSAT</span>
       </div>
       <nav class="dash-nav">
-        <button class="dnav active" data-panel="panel-bank">Ngân hàng câu hỏi</button>
-        <button class="dnav" data-panel="panel-config">Cấu hình bốc đề</button>
-        <button class="dnav" data-panel="panel-history">Lịch sử làm bài</button>
+        <button class="dnav active" data-panel="panel-bank">Ngân hàng đề thi</button>
+        <button class="dnav" data-panel="panel-config">Ma trận đề</button>
+        <button class="dnav" data-panel="panel-history">Lịch sử</button>
       </nav>
       <div class="dash-sidebar-footer">
-        <button class="dash-start-btn" id="dash-start-btn">🎯 Vào thi</button>
+        <button class="dash-start-btn" id="dash-start-btn">Thi</button>
       </div>
     </aside>
 
@@ -65,12 +65,12 @@
           <div class="panel-header-actions">
             <button class="ph-btn ph-import" id="bank-import-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Nhập JSON
+              Nhập File JSON
             </button>
             <input type="file" id="bank-file-input" accept=".json" hidden multiple/>
             <button class="ph-btn ph-pdf" id="bank-pdf-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
-              🤖 Nhập PDF
+              Nhập PDF
             </button>
             <input type="file" id="bank-pdf-input" accept=".pdf" hidden/>
             <button class="ph-btn ph-danger" id="bank-clear-btn">🗑 Xóa tất cả</button>
@@ -260,21 +260,21 @@
 <div id="login-screen" class="screen">
   <div class="login-page">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
-      <h1 class="login-org" style="margin:0">Ryujin DEV</h1>
+      <h1 class="login-org" style="margin:0"></h1>
       <button id="goto-dash-from-login" onclick="gotoDashboard()" style="
         display:flex;align-items:center;gap:.4rem;
-        background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);
-        color:#fff;padding:.4rem .9rem;border-radius:99px;cursor:pointer;
+        background:rgba(124, 4, 244, 0.12);border:1.5px solid rgba(0, 252, 42, 0.25);
+        color:#09dbee;padding:.4rem .9rem;border-radius:99px;cursor:pointer;
         font-size:.78rem;font-weight:600;font-family:var(--sans);
         backdrop-filter:blur(6px);transition:all .15s;
       " onmouseover="this.style.background='rgba(255,255,255,.22)'"
          onmouseout="this.style.background='rgba(255,255,255,.12)'">
-        ⚙️ Dashboard
+        Dashboard
       </button>
     </div>
 
     <div class="login-info-box">
-      <div class="login-info-title">Thông tin đăng nhập</div>
+      <div class="login-info-title"></div>
       <div class="login-info-line">Thông tin:<span id="info-account">VKOD00000</span></div>
       <div class="login-info-line">Mật khẩu: <span id="info-password">--------</span></div>
     </div>
@@ -284,11 +284,11 @@
       <div class="login-form">
         <div class="form-group">
           <label class="form-label"></label>
-          <input type="text" id="login-username" class="form-input" placeholder="Nhập mã VKOD..."/>
+          <input type="text" id="login-username" class="form-input" placeholder=""/>
         </div>
         <div class="form-group">
           <label class="form-label"></label>
-          <input type="password" id="login-password" class="form-input" placeholder="Nhập mật khẩu..."/>
+          <input type="password" id="login-password" class="form-input" placeholder=""/>
         </div>
         <div class="form-group">
           <label class="form-label"></label>
@@ -299,24 +299,24 @@
             <option value="Hóa Học">Hóa Học</option>
             <option value="Sinh Học">Sinh Học</option>
             <option value="Lịch Sử">Lịch Sử</option>
-            <option value="Địa Lý">Địa Lý</option>
+            <option value="Tiếng Anh">Tiếng Anh</option>
           </select>
         </div>
         <div id="bank-status-badge" class="bank-status-badge hidden"></div>
         <div id="login-error" class="login-error hidden">Vui lòng nhập đầy đủ thông tin.</div>
         <div id="draw-error" class="login-error hidden"></div>
         <button class="login-btn" id="login-btn">ĐĂNG NHẬP</button>
-        <div class="login-divider"><span>hoặc nạp đề trực tiếp</span></div>
+        <div class="login-divider"><span>Hoặc</span></div>
         <label class="login-import-btn" for="file-input-login">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Tải đề JSON lên (bỏ qua ngân hàng)
+          TẢI ĐỀ LÊN (.json)
         </label>
         <input type="file" id="file-input-login" accept=".json" hidden/>
         <div id="import-error" class="import-error hidden"></div>
-        <button class="back-to-dash-btn" id="back-to-dash-btn">← Quay lại Dashboard</button>
+        <button class="back-to-dash-btn" id="back-to-dash-btn">Quay lại dashboard</button>
       </div>
     </div>
-    <div class="login-footer">© VKOD</div>
+    <div class="login-footer">@ryujin</div>
   </div>
 </div>
 
@@ -331,10 +331,10 @@
     </div>
     <div class="header-right">
       <button class="theme-toggle-btn" id="theme-toggle-btn">
-        <span id="theme-icon">🌌</span>
-        <span id="theme-label">Galaxy</span>
+        <span id="theme-icon"></span>
+        <span id="theme-label">Black</span>
       </button>
-      <button class="submit-btn-top" id="submit-btn-top">Nộp bài</button>
+      <button class="submit-btn-top" id="submit-btn-top">NỘP BÀI</button>
     </div>
   </header>
   <div class="exam-body" id="exam-body"></div>
@@ -342,11 +342,11 @@
     <div class="bottom-bar-inner">
       <button class="bottom-nav-btn" id="prev-btn" disabled>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        Câu trước
+        CÂU TRƯỚC
       </button>
       <div class="bottom-dots" id="bottom-dots"></div>
       <button class="bottom-nav-btn" id="next-btn">
-        Câu tiếp
+        CÂU SAU
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
     </div>
@@ -359,14 +359,14 @@
 <div id="result-screen" class="screen">
   <div class="result-page">
     <div class="result-action-bar">
-      <button class="rab-btn rab-answers" id="btn-show-answers">Hiện đáp án</button>
-      <button class="rab-btn rab-edit" id="btn-edit-answers">Sửa đáp án</button>
-      <button class="rab-btn rab-restart" id="restart-btn">Thi lại</button>
-      <button class="rab-btn rab-dash" id="goto-dash-btn">Dashboard</button>
+      <button class="rab-btn rab-answers" id="btn-show-answers">ĐÁP ÁN</button>
+      <button class="rab-btn rab-edit" id="btn-edit-answers">SỬA ĐÁP ÁN</button>
+      <button class="rab-btn rab-restart" id="restart-btn">THI LẠI</button>
+      <button class="rab-btn rab-dash" id="goto-dash-btn">QUAY LẠI DASHBOARD</button>
     </div>
 
     <div class="result-box">
-      <div class="result-box-title">Kết quả bài thi</div>
+      <div class="result-box-title">ĐIỂM CỦA THÍ SINH</div>
       <div class="result-info-line">Số báo danh: <b id="result-sbd">VKOD00000</b></div>
       <div class="result-info-line">Môn thi: <b id="result-subject">Toán</b></div>
       <div class="result-info-line">Số câu đã làm: <b id="result-answered">0</b> / <b id="result-total">0</b></div>
@@ -375,7 +375,7 @@
 
     <div class="answer-display-panel hidden" id="answer-display-panel">
       <div class="adp-header">
-        <span class="adp-title">Đáp án chính thức</span>
+        <span class="adp-title">ĐÁP ÁN CHẤM</span>
         <button class="adp-close" id="adp-close">✕</button>
       </div>
       <div class="adp-body" id="adp-body"></div>

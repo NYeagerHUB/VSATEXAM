@@ -471,7 +471,7 @@ async function buildSubjectTabs() {
 
 async function switchSubject(subject) {
   currentSubject = subject;
-  showLoading(`Đang tải ngân hàng ${subject}...`);
+  showLoading(`ĐỢI LOAD${subject}...`);
   bank = await loadBank(subject);
   hideLoading();
   buildSubjectTabs();
@@ -485,8 +485,8 @@ async function switchSubject(subject) {
 function toggleTheme() {
   currentTheme = currentTheme === 'real' ? 'galaxy' : 'real';
   document.documentElement.setAttribute('data-theme', currentTheme);
-  document.getElementById('theme-icon').textContent  = currentTheme === 'galaxy' ? '🌞' : '🌌';
-  document.getElementById('theme-label').textContent = currentTheme === 'galaxy' ? 'Thi thật' : 'Galaxy';
+  document.getElementById('theme-icon').textContent  = currentTheme === 'galaxy' ? '' : '';
+  document.getElementById('theme-label').textContent = currentTheme === 'galaxy' ? 'CTU' : 'VSAT';
 }
 
 // ══════════════════════════════════════════
@@ -509,7 +509,7 @@ async function gotoLogin() {
   updateLoginBadge().catch(() => {});
   showScreen('login-screen');
   // Tạo mã mới mỗi lần vào thi lại
-  const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
+  const code = 'CTU' + Math.floor(10000 + Math.random() * 90000);
   const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
   document.getElementById('info-account').textContent  = code;
   document.getElementById('info-password').textContent = pass;
@@ -538,7 +538,7 @@ async function updateLoginBadge() {
   const c = { mcq: 0, truefalse: 0, short: 0, matching: 0 };
   data.forEach(r => { if (c[r.type] !== undefined) c[r.type]++; });
   badge.classList.remove('hidden');
-  badge.innerHTML = `📚 Ngân hàng <b>${subject}</b>: <b>${data.length}</b> câu &nbsp;·&nbsp; TN:<b>${c.mcq}</b> &nbsp;Đ/S:<b>${c.truefalse}</b> &nbsp;TLN:<b>${c.short}</b> &nbsp;Ghép:<b>${c.matching}</b>`;
+  badge.innerHTML = `NGÂN HÀNG <b>${subject}</b>: <b>${data.length}</b> CÂU &nbsp;·&nbsp; TRẮC NGHIỆM:<b>${c.mcq}</b> &nbsp;ĐÚNG/SAI:<b>${c.truefalse}</b> &nbsp;TRẢ LỜI NGẮN:<b>${c.short}</b> &nbsp;GHÉP CỘT:<b>${c.matching}</b>`;
 }
 
 function countByType(bankArr) {
@@ -567,14 +567,14 @@ async function handleLogin() {
   errEl.classList.add('hidden');
   studentInfo = { username: user, subject };
 
-  showLoading(`Đang bốc đề ${subject}...`);
+  showLoading(`Đang lấy đề ${subject}...`);
   const subjectBank = await loadBank(subject);
   hideLoading();
 
   const drawn = drawFromBank(subjectBank);
 
   if (drawn === null) {
-    drawErr.textContent = `⚠️ Ngân hàng môn "${subject}" chưa có câu hỏi. Vui lòng vào Dashboard để nhập đề.`;
+    drawErr.textContent = `Ngân hàng môn "${subject}" chưa có câu hỏi.Vui lòng thêm vào màn dashboard để thêm câu hỏi`;
     drawErr.classList.remove('hidden');
     return;
   }
@@ -584,7 +584,7 @@ async function handleLogin() {
     return;
   }
   startExam({
-    title: `Ca 1 - Phòng ONLINE - ${user}`,  // subject=${subject}
+    title: `Ca 0 - Phòng ONLINE - ${user}`,  // subject=${subject}
     time: config.time,
     questions: drawn
   });
@@ -640,7 +640,7 @@ function drawFromBank(subjectBank) {
     if (n > 0 && byType[type].length < n)
       errors.push(`${typeFull(type)}: cần ${n}, có ${byType[type].length}`);
   });
-  if (errors.length) return { error: '⚠️ Không đủ câu: ' + errors.join('; ') };
+  if (errors.length) return { error: 'Không đủ câu: ' + errors.join('; ') };
 
   const shuffle = arr => [...arr].sort(() => Math.random() - .5);
   let qs = [];
@@ -1348,11 +1348,11 @@ async function handlePdfImport(e) {
   e.target.value = '';
 
   if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-    showToast('⚠️ Vui lòng chọn file PDF', true);
+    showToast('Vui lòng chọn file PDF', true);
     return;
   }
 
-  showLoading('🤖 AI đang đọc PDF...');
+  showLoading('AI đang đọc PDF...');
 
   try {
     // Convert PDF to base64

@@ -410,7 +410,7 @@ code{background:var(--q-alt-bg);padding:.1rem .35rem;border-radius:3px;font-fami
 .bottom-bar-inner{width:100%;display:flex;align-items:center;justify-content:center;gap:.55rem;padding:0 .7rem}
 .bottom-dots{display:flex;align-items:center;gap:4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;max-width:calc(100% - 210px)}
 .bottom-dots::-webkit-scrollbar{display:none}
-.b-dot{width:28px;height:28px;min-width:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;font-family:var(--mono);cursor:pointer;border:2px solid var(--bottom-dot-bd);color:var(--bottom-text);background:transparent;flex-shrink:0;transition:background .15s,border-color .15s,color .15s}
+.b-dot{width:28px;height:28px;min-width:28px;border-radius:  6px;;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;font-family:var(--mono);cursor:pointer;border:2px solid var(--bottom-dot-bd);color:var(--bottom-text);background:rgb(66, 65, 65);;flex-shrink:0;transition:background .15s,border-color .15s,color .15s}
 .b-dot:hover{border-color:var(--accent);color:var(--accent)}
 .b-dot.answered{border-color:var(--bottom-done);color:var(--bottom-done)}
 .b-dot.current{background:var(--bottom-cur-bg);border-color:var(--bottom-cur-bg);color:var(--bottom-cur-text)}
