@@ -1351,49 +1351,22 @@ QUY TẮC:
 - Trích xuất ĐẦY ĐỦ tất cả 25 câu
 - Không thêm bất kỳ trường nào khác ngoài schema trên`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Gọi qua Vercel proxy — tránh CORS và giấu API key
+    const response = await fetch('/api/parse-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-            },
-            {
-              type: 'text',
-              text: `Hãy trích xuất tất cả câu hỏi từ đề thi này. Trả về JSON array thuần túy.`
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify({ base64, filename: file.name })
     });
 
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || `API error ${response.status}`);
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Lỗi server ${response.status}`);
     }
 
     const data = await response.json();
-    const raw = data.content.map(c => c.text || '').join('');
+    if (data.error) throw new Error(data.error);
 
-    // Parse JSON — bỏ markdown nếu có
-    const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    let questions;
-    try {
-      questions = JSON.parse(clean);
-    } catch {
-      // Thử tìm array trong text
-      const m = clean.match(/\[[\s\S]*\]/);
-      if (m) questions = JSON.parse(m[0]);
-      else throw new Error('AI không trả về JSON hợp lệ');
-    }
-
+    const questions = data.questions;
     if (!Array.isArray(questions) || !questions.length) {
       throw new Error('Không tìm thấy câu hỏi nào trong file');
     }
