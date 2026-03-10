@@ -325,7 +325,7 @@ async function checkSupabaseConnection() {
     const { error } = await sb.from('questions').select('id').limit(1);
     if (error) throw error;
     dot.style.background = '#38d690';
-    label.textContent = 'Supabase ✓';
+    label.textContent = '';
   } catch(e) {
     dot.style.background = '#e53e3e';
     label.textContent = 'Mất kết nối';
