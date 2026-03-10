@@ -1,108 +1,112 @@
 /**
  * Vercel Serverless Function: /api/parse-pdf
- * Proxy request từ browser → Anthropic API
+ * Dùng Google Gemini API (free) để parse đề thi PDF
  *
  * SETUP:
- *   1. Tạo folder "api" trong root project Vercel
- *   2. Đặt file này vào api/parse-pdf.js
- *   3. Vào Vercel Dashboard → Settings → Environment Variables
- *      Thêm: ANTHROPIC_API_KEY = sk-ant-...
+ *   Vercel Dashboard → Settings → Environment Variables
+ *   Thêm: GEMINI_API_KEY = AIza...
+ *   Lấy key tại: https://aistudio.google.com/apikey
  */
 
 export default async function handler(req, res) {
-  // CORS headers — cho phép browser gọi
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY chưa được cấu hình trong Vercel Environment Variables' });
+    return res.status(500).json({
+      error: 'GEMINI_API_KEY chưa được cấu hình. Vào Vercel → Settings → Environment Variables để thêm.'
+    });
   }
 
   try {
     const { base64, filename } = req.body;
-    if (!base64) {
-      return res.status(400).json({ error: 'Thiếu dữ liệu PDF (base64)' });
-    }
+    if (!base64) return res.status(400).json({ error: 'Thiếu dữ liệu PDF' });
 
-    const systemPrompt = `Bạn là hệ thống phân tích đề thi VSAT của Đại học Cần Thơ. Hãy đọc file PDF đề thi và trích xuất TẤT CẢ câu hỏi.
+    const prompt = `Bạn là hệ thống trích xuất câu hỏi từ đề thi đại học Việt Nam. Đọc kỹ toàn bộ PDF và trích xuất TẤT CẢ câu hỏi.
 
-ĐỊNH DẠNG OUTPUT: Chỉ trả về JSON array thuần túy, không có markdown, không có backtick, không có giải thích.
+CẤU TRÚC ĐỀ VSAT PHỔ BIẾN (nhưng hãy nhận diện linh hoạt với mọi loại đề):
+- Câu 01–09: Đúng/Sai — có bảng "Phát biểu | Đúng | Sai" với 4 mệnh đề
+- Câu 10–15: Trắc nghiệm — có 4 phương án A/B/C/D
+- Câu 16–20: Ghép cột — cột trái 4 ý, cột phải 6 lựa chọn A–F
+- Câu 21–25: Trả lời ngắn — điền số hoặc từ
 
-CẤU TRÚC MỖI CÂU:
-- Câu Đúng/Sai (câu 01-09): {"id":"auto","type":"truefalse","question":"Nội dung dẫn câu","statements":["mệnh đề 1","mệnh đề 2","mệnh đề 3","mệnh đề 4"],"answers":["D","S","D","S"]}
-- Câu MCQ (câu 10-15): {"id":"auto","type":"mcq","question":"Nội dung câu hỏi","options":["A. ...","B. ...","C. ...","D. ..."],"answer":0}
-  (answer là index 0-3 tương ứng A-D)
-- Câu ghép cột (câu 16-20): {"id":"auto","type":"matching","question":"Nội dung","left":["ý 1","ý 2","ý 3","ý 4"],"right":["A. ...","B. ...","C. ...","D. ...","E. ...","F. ..."],"answers":[indexA,indexB,indexC,indexD]}
-  (answers là array index 0-based của cột phải tương ứng với từng ý cột trái)
-- Câu trả lời ngắn (câu 21-25): {"id":"auto","type":"short","question":"Nội dung câu hỏi","answer":"đáp án"}
+NHẬN DIỆN LINH HOẠT:
+- Bảng "T/F" trong đề Tiếng Anh → type: truefalse (T=D, F=S)
+- "Read and choose A/B/C/D" → type: mcq
+- "Match 1-4 with A-F" → type: matching
+- "Fill in ONE word" → type: short
+- Câu có đoạn văn dài → gộp hết đoạn văn vào question
+
+OUTPUT: Chỉ JSON array. Không markdown, không backtick, không giải thích.
+
+SCHEMA:
+Đúng/Sai: {"id":"auto","type":"truefalse","question":"dẫn đề","statements":["m1","m2","m3","m4"],"answers":["D","S","D","S"]}
+MCQ: {"id":"auto","type":"mcq","question":"câu hỏi","options":["A. ...","B. ...","C. ...","D. ..."],"answer":1}
+Ghép cột: {"id":"auto","type":"matching","question":"câu hỏi","left":["ý1","ý2","ý3","ý4"],"right":["A....","B....","C....","D....","E....","F...."],"answers":[0,2,1,3]}
+Trả lời ngắn: {"id":"auto","type":"short","question":"câu hỏi đầy đủ","answer":"đáp án","placeholder":"gợi ý"}
 
 QUY TẮC:
-- Nếu câu có hình ảnh/sơ đồ không đọc được, ghi "[IMG:PLACEHOLDER]" vào question
-- Giữ nguyên ký hiệu hóa học: H₂SO₄, Fe²⁺, NH₃ (dùng unicode)
-- Giữ nguyên công thức toán bằng LaTeX: \\(x^2\\)
-- answers cho truefalse: "D" = Đúng, "S" = Sai, null nếu không rõ
-- Trích xuất ĐẦY ĐỦ tất cả 25 câu
-- KHÔNG thêm bất kỳ trường nào khác ngoài schema trên`;
+- Giữ công thức: H₂SO₄ Fe²⁺ hoặc LaTeX \\(\\frac{a}{b}\\)
+- Câu có hình/đồ thị → thêm "[IMG:PLACEHOLDER]" vào question
+- answer/answers = null nếu đề không có đáp án
+- KHÔNG bỏ sót câu nào
+- Đề Tiếng Anh Part 1: question = nội dung biển/tin nhắn/quảng cáo, statements = 4 nhận định T/F`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-            },
-            {
-              type: 'text',
-              text: 'Hãy trích xuất tất cả câu hỏi từ đề thi này. Trả về JSON array thuần túy.'
-            }
-          ]
-        }]
-      })
-    });
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: 'application/pdf', data: base64 } },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 8192,
+            responseMimeType: 'application/json'
+          }
+        })
+      }
+    );
 
-    if (!response.ok) {
-      const err = await response.json();
-      return res.status(response.status).json({ error: err.error?.message || `Anthropic API error ${response.status}` });
+    if (!geminiRes.ok) {
+      const err = await geminiRes.json();
+      return res.status(geminiRes.status).json({ error: err.error?.message || `Gemini error ${geminiRes.status}` });
     }
 
-    const data = await response.json();
-    const raw = data.content.map(c => c.text || '').join('');
+    const geminiData = await geminiRes.json();
+    const raw = (geminiData.candidates?.[0]?.content?.parts || []).map(p => p.text||'').join('');
 
-    // Parse JSON — bỏ markdown nếu có
-    const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    if (!raw) return res.status(500).json({ error: 'Gemini không trả về kết quả. Thử lại.' });
+
     let questions;
     try {
+      const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
       questions = JSON.parse(clean);
     } catch {
-      const m = clean.match(/\[[\s\S]*\]/);
-      if (m) questions = JSON.parse(m[0]);
-      else return res.status(500).json({ error: 'AI không trả về JSON hợp lệ', raw: clean.slice(0, 500) });
+      const m = raw.match(/\[[\s\S]*\]/);
+      if (m) { try { questions = JSON.parse(m[0]); } catch { return res.status(500).json({ error: 'Không parse được JSON', raw: raw.slice(0,300) }); } }
+      else return res.status(500).json({ error: 'AI không trả về JSON hợp lệ', raw: raw.slice(0,300) });
     }
 
-    return res.status(200).json({ questions });
+    if (!Array.isArray(questions)) {
+      if (questions?.questions) questions = questions.questions;
+      else return res.status(500).json({ error: 'Kết quả không phải array', raw: raw.slice(0,300) });
+    }
 
-  } catch (err) {
+    if (!questions.length) return res.status(500).json({ error: 'Không tìm thấy câu hỏi nào' });
+
+    return res.status(200).json({ questions, total: questions.length });
+
+  } catch(err) {
     console.error('parse-pdf error:', err);
     return res.status(500).json({ error: err.message });
   }

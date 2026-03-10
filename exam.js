@@ -323,15 +323,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   createConnectionBadge();
   checkSupabaseConnection();
 
-  showLoading('Đang tải ngân hàng câu hỏi...');
-  try {
-    if (!sb) throw new Error('Supabase chưa khởi tạo');
-    bank = await loadBank(currentSubject);
-  } catch(e) {
-    console.error(e);
-    showToast('⚠️ Không tải được ngân hàng. Kiểm tra kết nối.', true);
-  }
-  hideLoading();
+  // Mặc định vào login screen
+  showScreen('login-screen');
+  // Tạo mã thi ngay
+  const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
+  const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
+  document.getElementById('info-account').textContent  = code;
+  document.getElementById('info-password').textContent = pass;
+  document.getElementById('login-username').value = code;
+
+  // Load bank ngầm (không block UI)
+  loadBank(currentSubject).then(b => { bank = b; }).catch(() => {});
 
   // Dashboard nav
   document.querySelectorAll('.dnav').forEach(btn =>
@@ -485,10 +487,11 @@ function switchDashPanel(panelId) {
 }
 
 async function gotoLogin() {
-  await updateLoginBadge();
+  updateLoginBadge().catch(() => {});
   showScreen('login-screen');
+  // Tạo mã mới mỗi lần vào thi lại
   const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
-  const pass = String(Math.floor(10000000 + Math.random() * 90000000));
+  const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
   document.getElementById('info-account').textContent  = code;
   document.getElementById('info-password').textContent = pass;
   document.getElementById('login-username').value = code;
@@ -500,7 +503,7 @@ async function gotoDashboard() {
   clearInterval(timerInterval);
   examData = null; answers = []; answerKey = []; currentIdx = 0;
   showLoading('Đang tải...');
-  bank = await loadBank(currentSubject);
+  try { bank = await loadBank(currentSubject); } catch(e) { console.error(e); }
   hideLoading();
   buildSubjectTabs();
   renderBankList();

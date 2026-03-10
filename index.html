@@ -33,7 +33,7 @@
 <!-- ═══════════════════════════════════════
      DASHBOARD  (màn hình chính quản lý)
 ═══════════════════════════════════════ -->
-<div id="dashboard-screen" class="screen active">
+<div id="dashboard-screen" class="screen">
   <div class="dash-layout">
 
     <!-- Sidebar -->
@@ -255,7 +255,19 @@
 ═══════════════════════════════════════ -->
 <div id="login-screen" class="screen">
   <div class="login-page">
-    <h1 class="login-org">Ryujin DEV</h1>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+      <h1 class="login-org" style="margin:0">Ryujin DEV</h1>
+      <button id="goto-dash-from-login" onclick="gotoDashboard()" style="
+        display:flex;align-items:center;gap:.4rem;
+        background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);
+        color:#fff;padding:.4rem .9rem;border-radius:99px;cursor:pointer;
+        font-size:.78rem;font-weight:600;font-family:var(--sans);
+        backdrop-filter:blur(6px);transition:all .15s;
+      " onmouseover="this.style.background='rgba(255,255,255,.22)'"
+         onmouseout="this.style.background='rgba(255,255,255,.12)'">
+        ⚙️ Dashboard
+      </button>
+    </div>
 
     <div class="login-info-box">
       <div class="login-info-title">Thông tin đăng nhập</div>
