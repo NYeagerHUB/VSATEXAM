@@ -53,7 +53,8 @@ const LS_CONFIG = 'vsat_config_v2';   // config vẫn giữ localStorage
 
 const SUBJECTS = ['Toán','Ngữ Văn','Vật Lý','Hóa Học','Sinh Học','Lịch Sử','Địa Lý','Tiếng Anh',];
 
-const DEFAULT_CONFIG = { mcq: 6, truefalse: 9, short: 5, matching: 5, time: 90 };
+// Cấu trúc cố định: câu 1-9=Đúng/Sai, 10-15=TN, 16-20=Ghép, 21-25=TLN
+const DEFAULT_CONFIG = { truefalse: 9, mcq: 6, matching: 5, short: 5, time: 90 };
 // 6+9+5+5 = 25 câu × 6đ = 150đ max
 
 // ══════════════════════════════════════════
@@ -72,6 +73,8 @@ let currentSubject = 'Toán';   // môn đang xem trong dashboard
 let bank           = [];        // ngân hàng của môn đang xem
 let config         = { ...DEFAULT_CONFIG };
 let bankEditIdx    = -1;
+const expandedFiles = new Set();  // bank file groups đang mở
+let   bankSortMode  = 'type';     // 'type' | 'date'
 
 // ══════════════════════════════════════════
 //  UTILS
@@ -95,6 +98,21 @@ function safe(s) {
 
 const pad   = n => String(n).padStart(2, '0');
 const ALPHA = ['A','B','C','D','E','F','G','H'];
+
+// Bỏ prefix "Câu N:", "Câu N.", "Câu N)" khi lưu vào bank
+function stripQuestionPrefix(text) {
+  if (!text) return '';
+  return String(text).replace(/^(câu|Câu|CAU)\s*\d+\s*[.:\)\-]\s*/i, '').trim();
+}
+
+// ── localStorage file-map: questionId → filename ──
+function getFileMap() {
+  try { return JSON.parse(localStorage.getItem('vsat_file_map') || '{}'); } catch { return {}; }
+}
+function setFileMap(m) { localStorage.setItem('vsat_file_map', JSON.stringify(m)); }
+function registerFile(ids, filename) {
+  const m = getFileMap(); ids.forEach(id => { if (id) m[id] = filename; }); setFileMap(m);
+}
 
 function typeFull(t) {
   return { mcq:'Trắc nghiệm', truefalse:'Đúng/Sai', short:'Trả lời ngắn', matching:'Ghép cột' }[t] || t;
@@ -359,6 +377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('bank-pdf-input').addEventListener('change', handlePdfImport);
   document.getElementById('bank-clear-btn').addEventListener('click', clearBank);
   document.getElementById('bank-filter-type').addEventListener('change', renderBankList);
+  document.getElementById('bank-sort')?.addEventListener('change', () => { bankSortMode = document.getElementById('bank-sort').value; renderBankList(); });
   document.getElementById('bank-search').addEventListener('input', renderBankList);
 
   // Subject tabs in dashboard
@@ -565,7 +584,7 @@ async function handleLogin() {
     return;
   }
   startExam({
-    title: `${subject} – ${user} – ${new Date().toLocaleDateString('vi-VN')}`,
+    title: `Ca 1 - Phòng ONLINE - ${user}`,  // subject=${subject}
     time: config.time,
     questions: drawn
   });
@@ -625,10 +644,12 @@ function drawFromBank(subjectBank) {
 
   const shuffle = arr => [...arr].sort(() => Math.random() - .5);
   let qs = [];
-  ['truefalse','mcq','matching','short'].forEach(t => {
-    if (need[t] > 0) qs.push(...shuffle(byType[t]).slice(0, need[t]));
-  });
-  return shuffle(qs);
+  // Thứ tự CỐ ĐỊNH: Đúng/Sai (1-9) → TN (10-15) → Ghép cột (16-20) → TLN (21-25)
+  if (need.truefalse > 0) qs.push(...shuffle(byType.truefalse).slice(0, need.truefalse));
+  if (need.mcq       > 0) qs.push(...shuffle(byType.mcq).slice(0, need.mcq));
+  if (need.matching  > 0) qs.push(...shuffle(byType.matching).slice(0, need.matching));
+  if (need.short     > 0) qs.push(...shuffle(byType.short).slice(0, need.short));
+  return qs; // KHÔNG shuffle final — giữ đúng thứ tự phần
 }
 
 // ══════════════════════════════════════════
@@ -684,9 +705,7 @@ function renderAllQuestions() {
     block.id = `q-block-${i}`;
     block.innerHTML = `
       <div class="q-block-header">
-        <span class="q-block-title">Câu ${i+1}
-          <span style="font-size:.7rem;opacity:.75;font-weight:400">[${typeFull(q.type)}]</span>
-        </span>
+        <span class="q-block-title">Câu ${i+1}</span>
         <button class="q-pin-btn" data-idx="${i}">📌</button>
       </div>
       <div class="q-block-body">
@@ -782,7 +801,7 @@ function buildMatchingHTML(q, i) {
     `<tr><td class="match-key">${ALPHA[ri]}.</td><td>${safe(it)}</td></tr>`).join('');
   const sels = q.left.map((_, li) => {
     const sv = answers[i]?.[li] != null ? answers[i][li] : '';
-    let opts = `<option value="">Chọn</option>`;
+    let opts = `<option value="">Chọn phương án</option>`;
     q.right.forEach((_, ri) =>
       opts += `<option value="${ri}" ${String(ri) === String(sv) ? 'selected' : ''}>${ALPHA[ri]}</option>`);
     return `<div class="match-label-item">
@@ -1172,13 +1191,17 @@ function handleBankImport(e) {
 
         const valid = ['truefalse', 'mcq', 'matching', 'short'];
         const rows = [];
+        const newIds = [];
         qs.forEach(q => {
           if (!valid.includes(q.type) || !q.question) { totalSkipped++; return; }
           if (!q.id) q.id = uid();
+          q.question = stripQuestionPrefix(q.question);  // bỏ "Câu N:"
           rows.push(qToDbRow({ ...q }, currentSubject));
           bank.push({ ...q });
+          newIds.push(q.id);
           totalAdded++;
         });
+        registerFile(newIds, file.name);  // lưu tên file cho từng câu
 
         if (rows.length > 0) {
           showLoading(`Đang lưu ${rows.length} câu lên Supabase...`);
@@ -1294,7 +1317,12 @@ async function confirmPdfImport() {
   document.getElementById('pdf-confirm-btn').textContent = 'Đang lưu...';
   document.getElementById('pdf-confirm-btn').disabled = true;
 
-  const rows = questions.map(q => qToDbRow({ ...q, id: q.id || uid() }, currentSubject));
+  const newIds = [];
+  const rows = questions.map(q => {
+    const id = q.id || uid();
+    newIds.push(id);
+    return qToDbRow({ ...q, id, question: stripQuestionPrefix(q.question) }, currentSubject);
+  });
   const BATCH = 50;
   let ok = true;
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -1303,6 +1331,7 @@ async function confirmPdfImport() {
   }
 
   if (ok) {
+    registerFile(newIds, window._pdfFilename || 'PDF Import');  // lưu tên file PDF
     bank = await loadBank(currentSubject);
     buildSubjectTabs();
     renderBankList();
@@ -1379,6 +1408,7 @@ QUY TẮC:
 
     hideLoading();
     window._pdfParsedQuestions = questions;
+    window._pdfFilename = file.name;
     showPdfReviewModal(questions, file.name);
 
   } catch(err) {
@@ -1392,6 +1422,7 @@ async function clearBank() {
   if (!confirm(`Xóa toàn bộ ngân hàng môn "${currentSubject}"? Không thể hoàn tác.`)) return;
   showLoading('Đang xóa...');
   await sb.from('questions').delete().eq('subject', currentSubject);
+  const m = getFileMap(); bank.forEach(q => delete m[q.id]); setFileMap(m);
   bank = [];
   hideLoading();
   buildSubjectTabs();
@@ -1403,6 +1434,7 @@ async function deleteBankItem(idx) {
   const q = bank[idx];
   showLoading('Đang xóa...');
   await deleteSingleQuestion(q.id);
+  const m = getFileMap(); delete m[q.id]; setFileMap(m);
   bank.splice(idx, 1);
   hideLoading();
   buildSubjectTabs();
@@ -1422,62 +1454,113 @@ function renderBankList() {
 
   const typeF  = document.getElementById('bank-filter-type')?.value || '';
   const search = (document.getElementById('bank-search')?.value || '').toLowerCase();
-  const emptyState = document.getElementById('bank-empty-state');
-  const listEl     = document.getElementById('bank-list');
+  const sortMode = document.getElementById('bank-sort')?.value || 'type';
+  const listEl = document.getElementById('bank-list');
   if (!listEl) return;
 
+  if (bank.length === 0) {
+    document.getElementById('bank-empty-state').style.display = '';
+    listEl.innerHTML = '';
+    return;
+  }
+  document.getElementById('bank-empty-state').style.display = 'none';
+
+  const fileMap = getFileMap();
+
+  // Filter
   const filtered = bank.filter(q => {
     if (typeF && q.type !== typeF) return false;
     if (search && !q.question.toLowerCase().includes(search)) return false;
     return true;
   });
 
-  // Show subject context label
-  let subjectLabel = document.getElementById('bank-subject-label');
-  if (!subjectLabel) {
-    subjectLabel = document.createElement('div');
-    subjectLabel.id = 'bank-subject-label';
-    subjectLabel.style.cssText = 'font-size:.78rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;';
-    listEl.parentNode.insertBefore(subjectLabel, listEl);
-  }
-  subjectLabel.textContent = `Đang xem: ${currentSubject} — ${bank.length} câu hỏi`;
+  // Group by source file
+  const fileGroups = new Map();
+  filtered.forEach(q => {
+    const f = fileMap[q.id] || '📎 Câu hỏi lẻ';
+    if (!fileGroups.has(f)) fileGroups.set(f, []);
+    fileGroups.get(f).push(q);
+  });
 
-  if (bank.length === 0) {
-    emptyState.style.display = '';
-    listEl.innerHTML = '';
-    return;
-  }
-  emptyState.style.display = 'none';
+  // Sort within each group
+  const typeOrder = { truefalse: 0, mcq: 1, matching: 2, short: 3 };
+  fileGroups.forEach(qs => {
+    if (sortMode === 'type') qs.sort((a, b) => (typeOrder[a.type]||9) - (typeOrder[b.type]||9));
+  });
 
-  if (filtered.length === 0) {
-    listEl.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:.85rem">Không tìm thấy câu hỏi phù hợp.</div>';
-    return;
-  }
+  listEl.innerHTML = [...fileGroups.entries()].map(([filename, qs]) => {
+    const isExpanded = expandedFiles.has(filename);
+    const gc = countByType(qs);
+    const meta = [
+      gc.truefalse ? `Đ/S: ${gc.truefalse}` : '',
+      gc.mcq       ? `TN: ${gc.mcq}` : '',
+      gc.matching  ? `Ghép: ${gc.matching}` : '',
+      gc.short     ? `TLN: ${gc.short}` : '',
+    ].filter(Boolean).join(' · ');
 
-  listEl.innerHTML = filtered.map(q => {
-    const idx = bank.findIndex(b => b.id === q.id);
-    const hasAns = checkQuestionHasAnswer(q);
-    const keyPreview = getKeyPreview(q);
-    return `<div class="bank-card">
-      <div class="bank-card-type ${q.type}">${typeShort(q.type)}</div>
-      <div class="bank-card-body">
-        <div class="bank-card-q">${safe(q.question)}</div>
-        <div class="bank-card-meta">
-          <span style="font-family:var(--mono);font-size:.68rem;color:var(--text-muted);opacity:.7">ID: ${q.id || '–'}</span>
-          &nbsp;·&nbsp;
-          <span class="bank-card-ans ${hasAns ? 'has-ans' : 'no-ans'}">${hasAns ? '✓ Có đáp án' : '✗ Chưa có đáp án'}</span>
-          ${keyPreview ? `<span class="bank-card-key">→ ${escH(keyPreview)}</span>` : ''}
+    const isPdf  = filename.toLowerCase().endsWith('.pdf');
+    const isJson = filename.toLowerCase().endsWith('.json');
+    const icon   = isPdf ? '📄' : isJson ? '📋' : '📎';
+    const displayName = filename.startsWith('📎') ? filename : filename.replace(/\.[^.]+$/, '');
+
+    const cardsHTML = isExpanded ? qs.map(q => {
+      const idx = bank.findIndex(b => b.id === q.id);
+      const hasAns = checkQuestionHasAnswer(q);
+      const keyPrev = getKeyPreview(q);
+      return `<div class="bank-card">
+        <div class="bank-card-type ${q.type}">${typeShort(q.type)}</div>
+        <div class="bank-card-body">
+          <div class="bank-card-q">${safe(q.question)}</div>
+          <div class="bank-card-meta">
+            <span class="bank-card-ans ${hasAns?'has-ans':'no-ans'}">${hasAns?'✓ Có đáp án':'✗ Chưa có đáp án'}</span>
+            ${keyPrev ? `<span class="bank-card-key">→ ${escH(keyPrev)}</span>` : ''}
+          </div>
         </div>
+        <div class="bank-card-actions">
+          <button class="bc-btn" onclick="openBankEdit(${idx})">✏️</button>
+          <button class="bc-btn del" onclick="deleteBankItem(${idx})">🗑</button>
+        </div>
+      </div>`;
+    }).join('') : '';
+
+    const isLone = filename.startsWith('📎');
+    return `<div class="file-group">
+      <div class="file-group-header" onclick="toggleFileGroup('${escH(filename).replace(/'/g,'&#39;')}')">
+        <span class="file-group-icon">${icon}</span>
+        <div class="file-group-info">
+          <span class="file-group-name">${escH(displayName)}</span>
+          <span class="file-group-meta">${qs.length} câu &nbsp;·&nbsp; ${meta}</span>
+        </div>
+        ${!isLone ? `<button class="file-group-del" onclick="event.stopPropagation();deleteFileGroup('${escH(filename).replace(/'/g,'&#39;')}')" title="Xóa toàn bộ file này">🗑</button>` : ''}
+        <span class="file-group-arrow${isExpanded?' open':''}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </span>
       </div>
-      <div class="bank-card-actions">
-        <button class="bc-btn" onclick="openBankEdit(${idx})">✏️</button>
-        <button class="bc-btn del" onclick="deleteBankItem(${idx})">🗑</button>
-      </div>
+      ${isExpanded ? `<div class="file-group-body">${cardsHTML||'<div class="fg-empty">Không có câu hỏi phù hợp</div>'}</div>` : ''}
     </div>`;
   }).join('');
 
-  // Render LaTeX trong bank list
   renderMath(listEl);
+}
+
+function toggleFileGroup(filename) {
+  if (expandedFiles.has(filename)) expandedFiles.delete(filename);
+  else expandedFiles.add(filename);
+  renderBankList();
+}
+
+async function deleteFileGroup(filename) {
+  const m = getFileMap();
+  const toDel = bank.filter(q => (m[q.id] || '📎 Câu hỏi lẻ') === filename).map(q => q.id);
+  if (!toDel.length || !confirm(`Xóa ${toDel.length} câu từ "${filename.replace(/\.[^.]+$/,'')}"`)) return;
+  showLoading('Đang xóa...');
+  for (const id of toDel) { await deleteSingleQuestion(id); delete m[id]; }
+  setFileMap(m);
+  bank = bank.filter(q => !toDel.includes(q.id));
+  expandedFiles.delete(filename);
+  hideLoading();
+  buildSubjectTabs();
+  renderBankList();
 }
 
 function checkQuestionHasAnswer(q) {

@@ -125,14 +125,18 @@
           </div>
         </div>
 
-        <!-- Filter -->
+        <!-- Filter + Sort -->
         <div class="bank-filter-row">
+          <select class="filter-sel" id="bank-sort">
+            <option value="type">Sắp xếp: Theo loại</option>
+            <option value="date">Sắp xếp: Theo ngày</option>
+          </select>
           <select class="filter-sel" id="bank-filter-type">
             <option value="">Tất cả loại</option>
-            <option value="mcq">Trắc nghiệm</option>
             <option value="truefalse">Đúng/Sai</option>
-            <option value="short">Trả lời ngắn</option>
+            <option value="mcq">Trắc nghiệm</option>
             <option value="matching">Ghép cột</option>
+            <option value="short">Trả lời ngắn</option>
           </select>
           <input type="text" class="filter-search" id="bank-search" placeholder="🔍 Tìm kiếm câu hỏi..."/>
         </div>
@@ -163,7 +167,7 @@
             <div class="cfg-card-avail" id="avail-mcq">0 câu trong ngân hàng</div>
             <div class="cfg-card-input-row">
               <span>Bốc</span>
-              <input type="number" class="cfg-num" id="cfg-mcq" min="0" max="99" value="9"/>
+              <input type="number" class="cfg-num" id="cfg-mcq" min="0" max="99" value="6"/>
               <span>câu</span>
             </div>
           </div>
@@ -172,7 +176,7 @@
             <div class="cfg-card-avail" id="avail-tf">0 câu trong ngân hàng</div>
             <div class="cfg-card-input-row">
               <span>Bốc</span>
-              <input type="number" class="cfg-num" id="cfg-tf" min="0" max="99" value="11"/>
+              <input type="number" class="cfg-num" id="cfg-tf" min="0" max="99" value="9"/>
               <span>câu</span>
             </div>
           </div>
@@ -190,7 +194,7 @@
             <div class="cfg-card-avail" id="avail-match">0 câu trong ngân hàng</div>
             <div class="cfg-card-input-row">
               <span>Bốc</span>
-              <input type="number" class="cfg-num" id="cfg-match" min="0" max="99" value="0"/>
+              <input type="number" class="cfg-num" id="cfg-match" min="0" max="99" value="5"/>
               <span>câu</span>
             </div>
           </div>
