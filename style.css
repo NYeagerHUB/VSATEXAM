@@ -328,10 +328,10 @@ code{background:var(--q-alt-bg);padding:.1rem .35rem;border-radius:3px;font-fami
 
 /* Centered exam page (max 920px like real web) */
 .exam-page-wrap{
-  max-width:920px;width:100%;margin:0 auto;
+  max-width:760px;width:100%;margin:0 auto;
   background:var(--content-bg);
   min-height:calc(100vh - 48px);
-  box-shadow:0 0 0 1px var(--border);
+  box-shadow:0 2px 12px rgba(0,0,0,.08),0 0 0 1px var(--border);
 }
 
 .exam-header{
@@ -599,7 +599,7 @@ code{background:var(--q-alt-bg);padding:.1rem .35rem;border-radius:3px;font-fami
   transition:background .3s;
 }
 .bottom-bar-inner{
-  max-width:920px;width:100%;margin:0 auto;
+  max-width:760px;width:100%;margin:0 auto;
   display:flex;align-items:center;
   justify-content:center;gap:.6rem;padding:0 .8rem;
 }
@@ -794,3 +794,12 @@ code{background:var(--q-alt-bg);padding:.1rem .35rem;border-radius:3px;font-fami
   .matching-tables{flex-direction:column}
   .bottom-dots{max-width:calc(100% - 200px)}
 }
+
+/* ── Question extras: image + table ── */
+.question-image{margin:.8rem 1.5rem 1rem;text-align:center}
+.question-image img{max-width:100%;height:auto;max-height:360px;object-fit:contain;border-radius:6px;border:1px solid var(--border)}
+.question-table-wrap{margin:.8rem 0 1rem;overflow-x:auto;padding:0 1.5rem}
+.question-table{border-collapse:collapse;min-width:260px;font-size:.88rem}
+.question-table th,.question-table td{border:1px solid var(--border2);padding:.5rem .9rem;text-align:center;color:var(--text)}
+.question-table th{background:var(--q-alt-bg);font-weight:700;color:var(--text-label)}
+.question-table tbody tr:nth-child(even) td{background:var(--q-alt-bg)}

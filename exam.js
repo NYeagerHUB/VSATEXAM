@@ -182,6 +182,8 @@ function dbRowToQ(row) {
                    ? (row.type === 'mcq' ? Number(row.answer) : row.answer)
                    : undefined,
     placeholder: row.placeholder || undefined,
+    image_url:    row.image_url   || undefined,
+    table_data:   row.table_data  || undefined,
   };
 }
 
@@ -199,6 +201,8 @@ function qToDbRow(q, subject) {
     answers:     q.answers     || null,
     answer:      (q.answer !== null && q.answer !== undefined) ? String(q.answer) : null,
     placeholder: q.placeholder || null,
+    image_url:    q.image_url    || null,
+    table_data:   q.table_data   || null,
   };
 }
 
@@ -802,6 +806,7 @@ function renderAllQuestions() {
       </div>
       <div class="q-block-body">
         <div class="q-text">${safe(q.question)}</div>
+        ${buildQuestionExtras(q)}
         ${buildAnswerHTML(q, i)}
       </div>`;
     body.appendChild(block);
@@ -817,6 +822,36 @@ function renderAllQuestions() {
 
   // Render LaTeX cho toàn bộ exam body
   renderMath(body);
+}
+
+
+// ── Image + Table extras rendered AFTER question text ──
+function buildQuestionExtras(q) {
+  let html = '';
+  if (q.image_url) {
+    html += `<div class="question-image">
+      <img src="${q.image_url}" alt="Hình minh họa" loading="lazy"
+        onerror="this.parentElement.style.display='none'"/>
+    </div>`;
+  }
+  if (q.table_data) {
+    html += renderTable(q.table_data);
+  }
+  return html;
+}
+
+function renderTable(data) {
+  if (!data || !data.headers || !data.rows) return '';
+  let html = '<div class="question-table-wrap"><table class="question-table"><thead><tr>';
+  data.headers.forEach(h => { html += `<th>${safe(String(h))}</th>`; });
+  html += '</tr></thead><tbody>';
+  data.rows.forEach(r => {
+    html += '<tr>';
+    r.forEach(c => { html += `<td>${safe(String(c))}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
 }
 
 function buildAnswerHTML(q, i) {
