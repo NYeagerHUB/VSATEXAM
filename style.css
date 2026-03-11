@@ -820,3 +820,55 @@ code{background:var(--q-alt-bg);padding:.1rem .35rem;border-radius:3px;font-fami
   min-height:48px;
   word-break:break-word;
 }
+
+/* ══ LOGIN REDESIGN ══ */
+.login-brand{display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem}
+.login-brand-logo{
+  width:42px;height:42px;border-radius:11px;background:var(--accent);
+  display:grid;place-items:center;font-size:1.3rem;font-weight:900;color:#000;flex-shrink:0;
+}
+.login-brand-name{font-size:1.1rem;font-weight:800;color:var(--text);line-height:1.1}
+.login-brand-sub{font-size:.76rem;color:var(--text-muted);margin-top:.15rem}
+.login-info-box{
+  background:var(--content-bg);border:1px solid var(--border);
+  border-radius:var(--radius);padding:.8rem 1rem;margin-bottom:.75rem;
+}
+.login-info-title{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.5rem}
+.login-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.login-info-item{background:var(--body-bg);border:1px solid var(--border);border-radius:6px;padding:.45rem .65rem}
+.login-info-label{font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem}
+.login-info-val{font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);letter-spacing:.03em}
+
+/* ══ DASH UPLOAD BTN ══ */
+.dash-upload-btn:hover{opacity:.8;border-color:var(--accent)!important;color:var(--accent)!important}
+
+/* ══ ADD QUESTION ROW ══ */
+.add-q-row{
+  display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;
+  padding:.65rem 0;margin-bottom:.55rem;
+  border-bottom:1px solid var(--border);
+}
+.aq-btn{
+  display:inline-flex;align-items:center;gap:.3rem;
+  font-family:var(--sans);font-size:.76rem;font-weight:800;
+  border-radius:99px;cursor:pointer;padding:.3rem .85rem;height:28px;
+  border:1.5px solid transparent;transition:all .15s;
+}
+.aq-btn:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.aq-tf  {background:rgba(245,158,11,.12);color:#f59e0b;border-color:rgba(245,158,11,.3)}
+.aq-mcq {background:rgba(23,184,200,.12);color:var(--accent);border-color:rgba(23,184,200,.3)}
+.aq-ma  {background:rgba(167,139,250,.12);color:#a78bfa;border-color:rgba(167,139,250,.3)}
+.aq-sh  {background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.3)}
+.aq-tf:hover  {background:rgba(245,158,11,.22)}
+.aq-mcq:hover {background:rgba(23,184,200,.22)}
+.aq-ma:hover  {background:rgba(167,139,250,.22)}
+.aq-sh:hover  {background:rgba(34,197,94,.22)}
+
+/* ══ DASH START BTN better ══ */
+.dash-start-btn{
+  width:100%;background:var(--accent);color:#fff;
+  font-family:var(--sans);font-size:.88rem;font-weight:800;letter-spacing:.03em;
+  border:none;padding:.68rem;border-radius:var(--radius);cursor:pointer;
+  transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:.4rem;
+}
+.dash-start-btn:hover{opacity:.88}

@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Mặc định vào login screen
   showScreen('login-screen');
   // Tạo mã thi ngay
-  const code = 'VKOD' + Math.floor(10000 + Math.random() * 90000);
+  const code = 'CTU' + String(Math.floor(1000000000 + Math.random() * 9000000000));
   const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
   document.getElementById('info-account').textContent  = code;
   document.getElementById('info-password').textContent = pass;
@@ -1731,6 +1731,135 @@ function getKeyPreview(q) {
 
 // ══════════════════════════════════════════
 //  BANK EDIT MODAL
+
+// ══════════════════════════════════════════
+//  THÊM CÂU HỎI LẺ
+// ══════════════════════════════════════════
+let addQType = 'mcq';
+
+function openAddQuestion(type) {
+  addQType = type || 'mcq';
+  const modal = document.getElementById('add-q-modal');
+  if (!modal) { buildAddQModal(); }
+  // Set type selector
+  document.getElementById('aq-type').value = addQType;
+  renderAddQForm(addQType);
+  document.getElementById('add-q-modal').classList.remove('hidden');
+}
+
+function closeAddQuestion() {
+  document.getElementById('add-q-modal')?.classList.add('hidden');
+}
+
+function buildAddQModal() {
+  const modal = document.createElement('div');
+  modal.id = 'add-q-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:7000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:var(--content-bg);border:1px solid var(--border);border-radius:14px;width:100%;max-width:540px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:.85rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:.9rem;font-weight:800;color:var(--text)">➕ Thêm câu hỏi mới</div>
+        <button onclick="closeAddQuestion()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.1rem;padding:2px 6px">✕</button>
+      </div>
+      <div style="padding:.85rem 1.2rem;border-bottom:1px solid var(--border)">
+        <label style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.35rem">Loại câu hỏi</label>
+        <select id="aq-type" onchange="renderAddQForm(this.value)" style="background:var(--input-bg);border:1.5px solid var(--input-bd);border-radius:var(--radius);padding:.5rem .8rem;color:var(--text);font-family:var(--sans);font-size:.85rem;width:100%">
+          <option value="truefalse">Đúng / Sai</option>
+          <option value="mcq">Trắc nghiệm</option>
+          <option value="matching">Ghép cột</option>
+          <option value="short">Trả lời ngắn</option>
+        </select>
+      </div>
+      <div id="aq-form" style="overflow-y:auto;padding:.85rem 1.2rem;flex:1"></div>
+      <div style="padding:.75rem 1.2rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.5rem">
+        <button onclick="closeAddQuestion()" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:.5rem 1.1rem;cursor:pointer;font-size:.82rem;font-weight:700;color:var(--text);font-family:var(--sans)">Hủy</button>
+        <button onclick="saveAddQuestion()" style="background:var(--accent);border:none;border-radius:var(--radius);padding:.5rem 1.3rem;cursor:pointer;font-size:.82rem;font-weight:800;color:#fff;font-family:var(--sans)">💾 Lưu câu hỏi</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) closeAddQuestion(); });
+}
+
+function renderAddQForm(type) {
+  addQType = type;
+  const form = document.getElementById('aq-form');
+  if (!form) return;
+  const IG = (id,lbl,ph='',val='',rows=0) => `<div style="margin-bottom:.7rem">
+    <label style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.3rem">${lbl}</label>
+    ${rows?`<textarea id="${id}" rows="${rows}" style="width:100%;background:var(--input-bg);border:1.5px solid var(--input-bd);border-radius:var(--radius);padding:.5rem .75rem;color:var(--text);font-family:var(--sans);font-size:.84rem;resize:vertical">${escH(val)}</textarea>`
+    :`<input id="${id}" type="text" value="${escH(val)}" placeholder="${ph}" style="width:100%;background:var(--input-bg);border:1.5px solid var(--input-bd);border-radius:var(--radius);padding:.5rem .75rem;color:var(--text);font-family:var(--sans);font-size:.84rem"/>`}
+  </div>`;
+
+  let h = IG('aq-q','Câu hỏi','Nhập nội dung câu hỏi (hỗ trợ LaTeX $...$)','',3);
+
+  if (type === 'mcq') {
+    h += ['A','B','C','D'].map((l,i)=>IG(`aq-opt-${i}`,`Phương án ${l}`,`Nhập phương án ${l}...`)).join('');
+    h += `<div style="margin-bottom:.7rem"><label style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.3rem">✅ Đáp án đúng</label>
+      <select id="aq-ans" style="background:var(--input-bg);border:1.5px solid var(--input-bd);border-radius:var(--radius);padding:.5rem .75rem;color:var(--text);font-family:var(--sans);font-size:.84rem;width:100%">
+        <option value="">— Chưa có —</option>${['A','B','C','D'].map((l,i)=>`<option value="${i}">${l}</option>`).join('')}
+      </select></div>`;
+  }
+  else if (type === 'truefalse') {
+    h += ['a','b','c','d'].map((l,i)=>IG(`aq-stmt-${i}`,`Mệnh đề ${l})`,`Nhập mệnh đề ${l}...`)).join('');
+    h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.4rem;margin-bottom:.7rem">
+      ${['a','b','c','d'].map((l,i)=>`<div>
+        <label style="font-size:.7rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:.25rem">Đ/S ${l})</label>
+        <select id="aq-tfa-${i}" style="width:100%;background:var(--input-bg);border:1.5px solid var(--input-bd);border-radius:var(--radius);padding:.4rem .5rem;color:var(--text);font-family:var(--sans);font-size:.8rem">
+          <option value="">—</option><option value="D">Đúng</option><option value="S">Sai</option>
+        </select></div>`).join('')}
+    </div>`;
+  }
+  else if (type === 'matching') {
+    h += IG('aq-left','Cột trái (mỗi dòng 1 ý)','Ý 1&#10;Ý 2&#10;Ý 3&#10;Ý 4','',4);
+    h += IG('aq-right','Cột phải (mỗi dòng 1 mục)','','',4);
+    h += IG('aq-match-ans','Đáp án ghép (vd: A,B,C,D)','A,B,C,D');
+  }
+  else if (type === 'short') {
+    h += IG('aq-ans-short','✅ Đáp án','Nhập đáp án...');
+    h += IG('aq-placeholder','Placeholder (gợi ý cho thí sinh)','Nhập số...');
+  }
+
+  form.innerHTML = h;
+}
+
+async function saveAddQuestion() {
+  const type = addQType;
+  const qText = document.getElementById('aq-q')?.value.trim();
+  if (!qText) { showToast('Nhập nội dung câu hỏi', true); return; }
+
+  const q = { id: uid(), type, question: qText };
+
+  if (type === 'mcq') {
+    q.options = ['A','B','C','D'].map((_,i)=>document.getElementById(`aq-opt-${i}`)?.value.trim()||'');
+    const av = document.getElementById('aq-ans')?.value;
+    q.answer = av !== '' ? Number(av) : null;
+  }
+  else if (type === 'truefalse') {
+    q.statements = ['a','b','c','d'].map((_,i)=>document.getElementById(`aq-stmt-${i}`)?.value.trim()||'');
+    q.answers = ['a','b','c','d'].map((_,i)=>document.getElementById(`aq-tfa-${i}`)?.value||null);
+  }
+  else if (type === 'matching') {
+    q.left  = (document.getElementById('aq-left')?.value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    q.right = (document.getElementById('aq-right')?.value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    const raw = (document.getElementById('aq-match-ans')?.value||'').split(',').map(s=>s.trim().toUpperCase());
+    q.answers = raw.map(s=>{ const i='ABCDEF'.indexOf(s); return i>=0?i:null; });
+    if (!q.left.length) { showToast('Cột trái không được trống', true); return; }
+  }
+  else if (type === 'short') {
+    q.answer = document.getElementById('aq-ans-short')?.value.trim()||null;
+    q.placeholder = document.getElementById('aq-placeholder')?.value.trim()||'Nhập đáp án';
+  }
+
+  bank.push(q);
+  registerFile([q.id], `Thêm tay – ${new Date().toLocaleDateString('vi-VN')}`);
+  closeAddQuestion();
+  showLoading('Đang lưu...');
+  await saveSingleQuestion(q, currentSubject);
+  hideLoading();
+  renderBankList();
+  showToast('✓ Đã thêm câu hỏi mới');
+}
+
 // ══════════════════════════════════════════
 function openBankEdit(idx) {
   bankEditIdx = idx;
