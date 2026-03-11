@@ -258,6 +258,7 @@
                 <th>Số câu</th>
                 <th>Điểm</th>
                 <th>Thời gian</th>
+                <th>Chi tiết</th>
               </tr>
             </thead>
             <tbody id="hist-tbody"></tbody>
@@ -272,6 +273,116 @@
 <!-- ═══════════════════════════════════════
      LOGIN SCREEN
 ═══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+     KEY SCREEN
+═══════════════════════════════════════ -->
+<div id="key-screen" class="screen" style="display:flex!important">
+  <div class="key-page">
+    <div class="key-logo">V</div>
+    <div class="key-title">VSAT Exam System</div>
+    <div class="key-sub">Nhập mã kích hoạt để tiếp tục</div>
+    <input type="text" id="key-input" class="key-input" placeholder="STUDENT_xxxxxxx hoặc ADMIN_xxxxxxx" autocomplete="off"/>
+    <div id="key-error" class="key-error hidden">Mã không hợp lệ hoặc đã hết hạn</div>
+    <button class="key-btn" id="key-btn" onclick="submitKey()">XÁC NHẬN</button>
+    <div class="key-footer">Liên hệ giáo viên/admin để nhận mã</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ADMIN PANEL
+═══════════════════════════════════════ -->
+<div id="admin-screen" class="screen">
+  <div class="admin-page">
+    <div class="admin-header">
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <div class="admin-logo">⚙️</div>
+        <div>
+          <div class="admin-title">VSAT Admin Panel</div>
+          <div class="admin-sub">Quản lý hệ thống</div>
+        </div>
+      </div>
+      <button class="admin-logout" onclick="adminLogout()">Đăng xuất</button>
+    </div>
+
+    <div class="admin-grid">
+      <!-- Key Management -->
+      <div class="admin-card">
+        <div class="admin-card-title">🔑 Quản lý Mã Kích Hoạt</div>
+        <div class="admin-card-body">
+          <div class="admin-field">
+            <label class="admin-label">Tạo mã mới</label>
+            <div class="admin-row">
+              <select id="admin-key-type" class="admin-sel">
+                <option value="STUDENT">STUDENT</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <input type="number" id="admin-key-days" class="admin-input" value="30" min="1" max="365" style="width:70px" placeholder="ngày"/>
+              <button class="admin-btn" onclick="adminGenKey()">Tạo mã</button>
+            </div>
+          </div>
+          <div id="admin-new-key" class="admin-key-display hidden"></div>
+          <div class="admin-field" style="margin-top:.75rem">
+            <label class="admin-label">Danh sách mã hiện tại</label>
+            <div id="admin-key-list" class="admin-key-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="admin-card">
+        <div class="admin-card-title">⚙️ Cài đặt hệ thống</div>
+        <div class="admin-card-body">
+          <div class="admin-toggle-row">
+            <div class="admin-toggle-info">
+              <div class="admin-toggle-name">Key System</div>
+              <div class="admin-toggle-desc">Yêu cầu nhập mã khi vào web</div>
+            </div>
+            <label class="atoggle"><input type="checkbox" id="sys-key-enabled" onchange="adminSaveSetting('keyEnabled',this.checked)"/><span class="atoggle-slider"></span></label>
+          </div>
+          <div class="admin-toggle-row">
+            <div class="admin-toggle-info">
+              <div class="admin-toggle-name">Cho phép vào Dashboard</div>
+              <div class="admin-toggle-desc">Student có thể vào quản lý</div>
+            </div>
+            <label class="atoggle"><input type="checkbox" id="sys-dash-allowed" onchange="adminSaveSetting('dashAllowed',this.checked)"/><span class="atoggle-slider"></span></label>
+          </div>
+          <div class="admin-toggle-row">
+            <div class="admin-toggle-info">
+              <div class="admin-toggle-name">Xem lịch sử làm bài</div>
+              <div class="admin-toggle-desc">Student thấy tab Lịch sử</div>
+            </div>
+            <label class="atoggle"><input type="checkbox" id="sys-hist-allowed" onchange="adminSaveSetting('histAllowed',this.checked)"/><span class="atoggle-slider"></span></label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigate -->
+      <div class="admin-card">
+        <div class="admin-card-title">🚀 Điều hướng</div>
+        <div class="admin-card-body" style="display:flex;flex-direction:column;gap:.5rem">
+          <button class="admin-nav-btn" onclick="showScreen('dashboard-screen');gotoDashboard()">📊 Vào Dashboard</button>
+          <button class="admin-nav-btn" onclick="showScreen('login-screen')">🎓 Vào màn thi (Login)</button>
+        </div>
+      </div>
+
+      <!-- Account creation -->
+      <div class="admin-card">
+        <div class="admin-card-title">👤 Tạo tài khoản</div>
+        <div class="admin-card-body">
+          <div class="admin-code-box">
+            <div class="admin-code-title">Mã tạo tài khoản</div>
+            <div class="admin-code-val" id="admin-reg-code">CẦN CODE TẠO TÀI KHOẢN<br><small>(LIÊN HỆ ADMIN)</small></div>
+            <button class="admin-btn" onclick="adminGenRegCode()">Tạo mã đăng ký</button>
+          </div>
+          <div style="margin-top:.65rem;font-size:.76rem;color:var(--text-muted)">
+            Mã đăng ký dùng 1 lần. Thí sinh nhập mã này để tạo tài khoản Gmail.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="login-screen" class="screen">
   <div class="login-page">
 
@@ -356,9 +467,7 @@
     </div>
   </header>
   <div style="flex:1;overflow-y:auto;padding-bottom:58px">
-    <div class="exam-page-wrap">
-      <div class="exam-body" id="exam-body"></div>
-    </div>
+    <div class="exam-body" id="exam-body"></div>
   </div>
   <div class="bottom-bar">
     <div class="bottom-bar-inner">
@@ -379,20 +488,46 @@
      RESULT SCREEN
 ═══════════════════════════════════════ -->
 <div id="result-screen" class="screen">
-  <div class="result-page">
-    <div class="result-action-bar">
-      <button class="rab-btn rab-answers" id="btn-show-answers">ĐÁP ÁN</button>
-      <button class="rab-btn rab-edit" id="btn-edit-answers">SỬA ĐÁP ÁN</button>
-      <button class="rab-btn rab-restart" id="restart-btn">THI LẠI</button>
-      <button class="rab-btn rab-dash" id="goto-dash-btn">QUAY LẠI DASHBOARD</button>
-    </div>
+  <div class="result-page-new">
 
-    <div class="result-box">
-      <div class="result-box-title">ĐIỂM CỦA THÍ SINH</div>
-      <div class="result-info-line">Số báo danh: <b id="result-sbd">VKOD00000</b></div>
-      <div class="result-info-line">Môn thi: <b id="result-subject">Toán</b></div>
-      <div class="result-info-line">Số câu đã làm: <b id="result-answered">0</b> / <b id="result-total">0</b></div>
-      <div class="result-score-line">Điểm thi: <span class="result-score-val" id="result-score">0 điểm</span></div>
+    <!-- Card chính -->
+    <div class="rcard">
+      <div class="rcard-header">
+        <div class="rcard-logo">V</div>
+        <div>
+          <div class="rcard-sys">VSAT Exam System</div>
+          <div class="rcard-title">PHIẾU KẾT QUẢ THI</div>
+        </div>
+      </div>
+      <div class="rcard-divider"></div>
+      <div class="rcard-info-grid">
+        <div class="rcard-info-item">
+          <div class="rcard-info-label">Số báo danh</div>
+          <div class="rcard-info-val mono" id="result-sbd">CTU0000000000</div>
+        </div>
+        <div class="rcard-info-item">
+          <div class="rcard-info-label">Môn thi</div>
+          <div class="rcard-info-val" id="result-subject">Toán</div>
+        </div>
+        <div class="rcard-info-item">
+          <div class="rcard-info-label">Số câu đã làm</div>
+          <div class="rcard-info-val"><span id="result-answered">0</span> / <span id="result-total">0</span> câu</div>
+        </div>
+        <div class="rcard-info-item">
+          <div class="rcard-info-label">Kết quả</div>
+          <div class="rcard-info-val" id="result-rating">–</div>
+        </div>
+      </div>
+      <div class="rcard-score-wrap">
+        <div class="rcard-score-label">ĐIỂM THI</div>
+        <div class="rcard-score-val" id="result-score">0 điểm</div>
+      </div>
+      <div class="rcard-actions">
+        <button class="rab-btn rab-answers" id="btn-show-answers">📋 Đáp án</button>
+        <button class="rab-btn rab-edit" id="btn-edit-answers">✏️ Sửa đáp án</button>
+        <button class="rab-btn rab-restart" id="restart-btn">🔄 Thi lại</button>
+        <button class="rab-btn rab-dash" id="goto-dash-btn">⬅ Dashboard</button>
+      </div>
     </div>
 
     <div class="answer-display-panel hidden" id="answer-display-panel">

@@ -287,6 +287,17 @@ async function saveHistory(entries) {
   // Chỉ insert entry đầu tiên (entry mới nhất)
   if (!entries.length) return;
   const e = entries[0];
+  // Save local answer snapshot
+  try {
+    localStorage.setItem('vsat_hist_ans_' + e.id, JSON.stringify({
+      questions: examData.questions,
+      answers: answers,
+      answerKey: answerKey,
+    }));
+    // Keep only last 20 snapshots
+    const allKeys = Object.keys(localStorage).filter(k => k.startsWith('vsat_hist_ans_'));
+    if (allKeys.length > 20) { localStorage.removeItem(allKeys[0]); }
+  } catch {}
   const { error } = await sb.from('exam_history').insert({
     id:       e.id,
     username: e.username,
@@ -344,13 +355,179 @@ async function checkSupabaseConnection() {
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
+
+// ══════════════════════════════════════════
+//  KEY SYSTEM & ADMIN
+// ══════════════════════════════════════════
+const KEYS_STORE = 'vsat_keys_v1';
+const SETTINGS_STORE = 'vsat_sys_settings';
+const ACTIVE_KEY_STORE = 'vsat_active_key';
+
+function getSystemSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_STORE) || '{}'); } catch { return {}; }
+}
+function saveSystemSettings(s) { localStorage.setItem(SETTINGS_STORE, JSON.stringify(s)); }
+function adminSaveSetting(key, val) {
+  const s = getSystemSettings(); s[key] = val;
+  saveSystemSettings(s);
+}
+
+function getKeys() {
+  try { return JSON.parse(localStorage.getItem(KEYS_STORE) || '[]'); } catch { return []; }
+}
+function saveKeys(keys) { localStorage.setItem(KEYS_STORE, JSON.stringify(keys)); }
+
+function genKeyStr(type) {
+  return type + '_' + Math.random().toString(36).slice(2,11).toUpperCase();
+}
+
+function checkKeyValid(keyStr) {
+  const keys = getKeys();
+  const now = Date.now();
+  const found = keys.find(k => k.key === keyStr && (!k.expiry || k.expiry > now));
+  return found || null;
+}
+
+function submitKey() {
+  const val = document.getElementById('key-input').value.trim();
+  const errEl = document.getElementById('key-error');
+  const settings = getSystemSettings();
+
+  // Check if key system is enabled
+  if (settings.keyEnabled === false) {
+    // Skip key check - go to login directly
+    localStorage.setItem(ACTIVE_KEY_STORE, JSON.stringify({ type: 'STUDENT', key: 'bypass' }));
+    proceedAfterKey('STUDENT');
+    return;
+  }
+
+  const found = checkKeyValid(val);
+  if (!found) {
+    errEl.classList.remove('hidden');
+    return;
+  }
+  errEl.classList.add('hidden');
+  localStorage.setItem(ACTIVE_KEY_STORE, JSON.stringify(found));
+  proceedAfterKey(found.type);
+}
+
+function proceedAfterKey(type) {
+  if (type === 'ADMIN') {
+    showScreen('admin-screen');
+    renderAdminPanel();
+  } else {
+    const settings = getSystemSettings();
+    // Show/hide dashboard button based on settings
+    const dashBtn = document.getElementById('goto-dash-from-login');
+    const backBtn = document.getElementById('back-to-dash-btn');
+    const dashAllowed = settings.dashAllowed !== false;
+    if (dashBtn) dashBtn.style.display = dashAllowed ? '' : 'none';
+    if (backBtn) backBtn.style.display = dashAllowed ? '' : 'none';
+    // Show/hide history nav
+    const histNav = document.querySelector('[data-panel="panel-history"]');
+    if (histNav) histNav.style.display = settings.histAllowed !== false ? '' : 'none';
+    showScreen('login-screen');
+    gotoLogin();
+  }
+}
+
+function adminLogout() {
+  localStorage.removeItem(ACTIVE_KEY_STORE);
+  showScreen('key-screen');
+}
+
+function renderAdminPanel() {
+  const settings = getSystemSettings();
+  const el = id => document.getElementById(id);
+  if (el('sys-key-enabled'))   el('sys-key-enabled').checked = settings.keyEnabled !== false;
+  if (el('sys-dash-allowed'))  el('sys-dash-allowed').checked = settings.dashAllowed !== false;
+  if (el('sys-hist-allowed'))  el('sys-hist-allowed').checked = settings.histAllowed !== false;
+  renderAdminKeyList();
+}
+
+function renderAdminKeyList() {
+  const keys = getKeys();
+  const el = document.getElementById('admin-key-list');
+  if (!el) return;
+  if (!keys.length) { el.innerHTML = '<div style="font-size:.78rem;color:var(--text-muted);padding:.5rem">Chưa có mã nào</div>'; return; }
+  const now = Date.now();
+  el.innerHTML = keys.map((k,i) => {
+    const exp = k.expiry ? new Date(k.expiry).toLocaleDateString('vi-VN') : '∞';
+    const expired = k.expiry && k.expiry < now;
+    return `<div class="admin-key-row ${expired ? 'expired' : ''}">
+      <span class="admin-key-type ${k.type.toLowerCase()}">${k.type}</span>
+      <span class="admin-key-str">${k.key}</span>
+      <span class="admin-key-exp">${exp}</span>
+      <button class="admin-key-del" onclick="adminDelKey(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function adminGenKey() {
+  const type = document.getElementById('admin-key-type')?.value || 'STUDENT';
+  const days = parseInt(document.getElementById('admin-key-days')?.value || '30');
+  const keyStr = genKeyStr(type);
+  const keys = getKeys();
+  keys.push({ key: keyStr, type, expiry: Date.now() + days*86400000 });
+  saveKeys(keys);
+  const disp = document.getElementById('admin-new-key');
+  if (disp) {
+    disp.textContent = keyStr;
+    disp.classList.remove('hidden');
+    setTimeout(() => disp.classList.add('hidden'), 8000);
+  }
+  renderAdminKeyList();
+}
+
+function adminDelKey(idx) {
+  const keys = getKeys(); keys.splice(idx,1); saveKeys(keys); renderAdminKeyList();
+}
+
+function adminGenRegCode() {
+  const code = 'REG_' + Math.random().toString(36).slice(2,10).toUpperCase();
+  const el = document.getElementById('admin-reg-code');
+  if (el) el.innerHTML = `<b style="font-size:1.1rem;letter-spacing:.08em">${code}</b><br><small>Hết hạn sau 24 giờ · Dùng 1 lần</small>`;
+}
+
+// On init - check if key needed
+function checkKeySystem() {
+  const settings = getSystemSettings();
+  if (settings.keyEnabled === false) {
+    // Skip key screen
+    const active = localStorage.getItem(ACTIVE_KEY_STORE);
+    proceedAfterKey('STUDENT');
+    return true;
+  }
+  // Check active key
+  const activeRaw = localStorage.getItem(ACTIVE_KEY_STORE);
+  if (activeRaw) {
+    try {
+      const active = JSON.parse(activeRaw);
+      if (checkKeyValid(active.key) || active.key === 'bypass') {
+        proceedAfterKey(active.type || 'STUDENT');
+        return true;
+      }
+    } catch {}
+  }
+  // Show key screen
+  showScreen('key-screen');
+  return false;
+}
+
+// Input enter key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('key-screen').style.display !== 'none' &&
+      !document.getElementById('key-screen').classList.contains('hidden')) {
+    submitKey();
+  }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
   loadConfig();
   createConnectionBadge();
   checkSupabaseConnection();
 
-  // Mặc định vào login screen
-  showScreen('login-screen');
+  // Key system check
   // Tạo mã thi ngay
   const code = 'CTU' + String(Math.floor(1000000000 + Math.random() * 9000000000));
   const pass  = String(Math.floor(10000000 + Math.random() * 90000000));
@@ -360,6 +537,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load bank ngầm (không block UI)
   loadBank(currentSubject).then(b => { bank = b; }).catch(() => {});
+
+  // Key system
+  setTimeout(() => checkKeySystem(), 100);
 
   // Dashboard nav
   document.querySelectorAll('.dnav').forEach(btn =>
@@ -914,7 +1094,7 @@ function buildMCQHTML(q, i) {
       return `<input type="radio" class="mcq-option" name="mcq_${i}" value="${oi}" ${sel ? 'checked' : ''}/>
       <div class="mcq-row ${sel}" data-qi="${i}" data-oi="${oi}">
         <div class="mcq-radio-wrap"><div class="mcq-circle"></div></div>
-        <div class="mcq-text-wrap">${ALPHA[oi]}. ${safe(opt)}</div>
+        <div class="mcq-text-wrap">${safe(opt)}</div>
       </div>`;
     }).join('')
   }</div>`;
@@ -1188,9 +1368,22 @@ function renderScore() {
     const pts = calcScore(q, answers[i], answerKey[i]);
     if (pts !== null) total += pts;
   });
-  const maxPts = examData.questions.length * 6;  // 25×6 = 150
+  const maxPts = examData.questions.length * 6;
+  const hasKey = hasAnyKey();
   document.getElementById('result-score').textContent =
-    hasAnyKey() ? `${total} / ${maxPts} điểm` : '– (chưa có đáp án)';
+    hasKey ? `${total} / ${maxPts} điểm` : '– (chưa có đáp án)';
+  // Rating
+  const pct = hasKey && maxPts > 0 ? total / maxPts : null;
+  let rating = '–';
+  if (pct !== null) {
+    if (pct >= 0.9) rating = '🏆 Xuất sắc';
+    else if (pct >= 0.75) rating = '🥇 Giỏi';
+    else if (pct >= 0.6) rating = '🥈 Khá';
+    else if (pct >= 0.5) rating = '🥉 Trung bình';
+    else rating = '📚 Cần ôn thêm';
+  }
+  const rEl = document.getElementById('result-rating');
+  if (rEl) rEl.textContent = rating;
 }
 
 // ══════════════════════════════════════════
@@ -1208,7 +1401,7 @@ function renderAnswerDisplay() {
     const k = answerKey[i];
     let keyText = '';
     if (q.type === 'mcq')
-      keyText = (k !== null && k !== undefined) ? ALPHA[Number(k)] : '–';
+      keyText = (k !== null && k !== undefined) ? `Phương án ${Number(k)+1}` : '–';
     else if (q.type === 'truefalse')
       keyText = Array.isArray(k)
         ? k.map((v, si) => `(${si+1})${v || '–'}`).join(' ')
@@ -1682,6 +1875,7 @@ function renderBankList() {
           <span class="file-group-name">${escH(displayName)}</span>
           <span class="file-group-meta">${qs.length} câu &nbsp;·&nbsp; ${meta}</span>
         </div>
+        ${!isLone ? `<button class="file-group-ren" onclick="renameFileGroup('${escH(filename).replace(/'/g,'&#39;')}',event)" title="Đổi tên file">✏️</button>` : ''}
         ${!isLone ? `<button class="file-group-del" onclick="event.stopPropagation();deleteFileGroup('${escH(filename).replace(/'/g,'&#39;')}')" title="Xóa toàn bộ file này">🗑</button>` : ''}
         <span class="file-group-arrow${isExpanded?' open':''}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -1698,6 +1892,21 @@ function toggleFileGroup(filename) {
   if (expandedFiles.has(filename)) expandedFiles.delete(filename);
   else expandedFiles.add(filename);
   renderBankList();
+}
+
+
+function renameFileGroup(oldName, event) {
+  event.stopPropagation();
+  const newName = prompt(`Đổi tên file:\n"${oldName.replace(/\.[^.]+$/,'')}"\n\nNhập tên mới:`, oldName.replace(/\.[^.]+$/,''));
+  if (!newName || newName.trim() === oldName.replace(/\.[^.]+$/,'')) return;
+  const m = getFileMap();
+  const ext = oldName.match(/\.[^.]+$/) ? oldName.match(/\.[^.]+$/)[0] : '';
+  const newFull = newName.trim() + ext;
+  Object.keys(m).forEach(id => { if (m[id] === oldName) m[id] = newFull; });
+  setFileMap(m);
+  if (expandedFiles.has(oldName)) { expandedFiles.delete(oldName); expandedFiles.add(newFull); }
+  renderBankList();
+  showToast('✓ Đã đổi tên thành "' + newFull + '"');
 }
 
 async function deleteFileGroup(filename) {
@@ -2067,6 +2276,66 @@ function saveConfigFromUI() {
 // ══════════════════════════════════════════
 //  HISTORY TAB
 // ══════════════════════════════════════════
+
+function viewHistoryDetail(id) {
+  const snap = (() => { try { return JSON.parse(localStorage.getItem('vsat_hist_ans_'+id)||'null'); } catch { return null; } })();
+  if (!snap) { showToast('Không có dữ liệu chi tiết', true); return; }
+  
+  let modal = document.getElementById('hist-detail-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'hist-detail-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;backdrop-filter:blur(4px)';
+    modal.innerHTML = '<div id="hist-detail-inner" style="background:var(--content-bg);border:1px solid var(--border);border-radius:14px;width:100%;max-width:680px;min-height:300px"></div>';
+    modal.addEventListener('click', e => { if (e.target===modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+  
+  const qs = snap.questions || [], ans = snap.answers || [], key = snap.answerKey || [];
+  const inner = document.getElementById('hist-detail-inner');
+  
+  let html = `<div style="padding:.85rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:.9rem;font-weight:800;color:var(--text)">🔍 Chi tiết bài thi</div>
+    <button onclick="document.getElementById('hist-detail-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.1rem">✕</button>
+  </div>
+  <div style="padding:.85rem 1.2rem">`;
+  
+  qs.forEach((q, i) => {
+    const a = ans[i], k = key[i];
+    let aText = '–', kText = '–', correct = null;
+    
+    if (q.type === 'mcq') {
+      aText = a != null ? `Phương án ${Number(a)+1}` : '–';
+      kText = k != null ? `Phương án ${Number(k)+1}` : '–';
+      correct = a != null && k != null && String(a) === String(k);
+    } else if (q.type === 'truefalse') {
+      aText = Array.isArray(a) ? a.map((v,si) => `${si+1}:${v||'–'}`).join(' ') : '–';
+      kText = Array.isArray(k) ? k.map((v,si) => `${si+1}:${v||'–'}`).join(' ') : '–';
+      if (Array.isArray(a) && Array.isArray(k)) correct = a.every((v,si) => v===k[si]);
+    } else if (q.type === 'short') {
+      aText = a ? String(a) : '–';
+      kText = k ? String(k) : '–';
+      if (a && k) correct = String(a).trim().toLowerCase() === String(k).trim().toLowerCase();
+    } else if (q.type === 'matching') {
+      aText = Array.isArray(a) ? a.map((v,li) => `${li+1}→${v!=null?ALPHA[v]:'–'}`).join(' ') : '–';
+      kText = Array.isArray(k) ? k.map((v,li) => `${li+1}→${v!=null?ALPHA[v]:'–'}`).join(' ') : '–';
+    }
+    
+    const cls = correct === true ? 'ok' : correct === false ? 'wrong' : '';
+    html += `<div class="hist-detail-row ${cls}">
+      <div class="hist-detail-num">Câu ${i+1}</div>
+      <div class="hist-detail-q">${safe(q.question.slice(0,100))}${q.question.length>100?'…':''}</div>
+      <div class="hist-detail-ans"><span class="hda-label">Đã chọn:</span> ${escH(aText)}</div>
+      <div class="hist-detail-ans"><span class="hda-label">Đáp án:</span> ${escH(kText)}</div>
+      ${correct!==null?`<div class="hist-detail-result">${correct?'✅ Đúng':'❌ Sai'}</div>`:''}
+    </div>`;
+  });
+  
+  html += '</div>';
+  inner.innerHTML = html;
+  renderMath(inner);
+}
+
 async function renderHistory() {
   const hist    = await loadHistory();
   const emptyEl = document.getElementById('hist-empty');
@@ -2084,6 +2353,9 @@ async function renderHistory() {
     const isFull  = h.possible > 0 && h.score === h.possible;
     const maxPts  = h.totalQ ? h.totalQ * 6 : h.possible;
     const scoreDisplay = h.possible > 0 ? `${h.score}/${maxPts}` : '–';
+    // Check if local answers stored
+    const localAns = (() => { try { return JSON.parse(localStorage.getItem('vsat_hist_ans_'+h.id)||'null'); } catch { return null; } })();
+    const hasLocalAns = localAns && localAns.questions && localAns.questions.length;
     return `<tr>
       <td style="color:var(--text-muted);font-family:var(--mono);font-size:.76rem">${idx + 1}</td>
       <td><b>${escH(h.username)}</b></td>
@@ -2091,6 +2363,7 @@ async function renderHistory() {
       <td style="font-family:var(--mono)">${h.answered || 0}/${h.totalQ}</td>
       <td><span class="hist-score ${isFull ? 'full' : ''}">${scoreDisplay} đ</span></td>
       <td class="hist-date">${dateStr}</td>
+      <td>${hasLocalAns ? `<button class="hist-view-btn" onclick="viewHistoryDetail('${h.id}')">🔍 Xem</button>` : '<span style="color:var(--text-muted);font-size:.73rem">–</span>'}</td>
     </tr>`;
   }).join('');
 }
